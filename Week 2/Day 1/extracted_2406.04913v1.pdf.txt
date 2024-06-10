@@ -1,0 +1,763 @@
+Online Adaptation for Enhancing Imitation
+Learning Policies
+1stFederico Malato
+School of Computing
+University of Eastern Finland
+Joensuu, Finland
+federico.malato@uef.fi2ndVille Hautam ¨aki
+School of Computing
+University of Eastern Finland
+Joensuu, Finland
+ville.hautamaki@uef.fi
+Abstract —Imitation learning enables autonomous agents to
+learn from human examples, without the need for a reward
+signal. Still, if the provided dataset does not encapsulate the task
+correctly, or when the task is too complex to be modeled, such
+agents fail to reproduce the expert policy. We propose to recover
+from these failures through online adaptation. Our approach
+combines the action proposal coming from a pre-trained policy
+with relevant experience recorded by an expert. The combination
+results in an adapted action that closely follows the expert. Our
+experiments show that an adapted agent performs better than its
+pure imitation learning counterpart. Notably, adapted agents can
+achieve reasonable performance even when the base, non-adapted
+policy catastrophically fails.
+Index Terms —imitation learning, behavioral cloning, inverse
+reinforcement learning, online adaptation
+I. I NTRODUCTION
+Reinforcement learning (RL) [1] and Deep reinforcement
+learning (DRL) [2] have recently gained momentum as a con-
+sequence of notable breakthroughs in policy learning [3]–[5],
+and following the introduction of reinforcement learning from
+human feedback (RLHF) [6] for fine-tuning large language
+models (LLMs). In previous research, RL and DRL have
+been successfully applied in several domains, ranging from
+(and not limited to) playing video games [7]–[9], autonomous
+driving [10], to physics [11].
+Despite these incredible results, several challenges remain
+open [12]. Among those, specifying a reward signal for
+complex, structured tasks is one of the most prominent.
+A common approach to address this problem is imitation
+learning (IL) [13], that is, agents learn to act from an expert
+demonstrating the task, without a reward signal. Perhaps, the
+most known example of IL algorithm is behavioral cloning
+(BC) [14]. In BC, a policy is learned via supervised learning
+on the observation-action pairs of the expert dataset. Another
+notable IL-derived framework is inverse reinforcement learn-
+ing(IRL) [15], [16], where a policy is trained using standard
+RL on a reward model inferred from the expert trajectories.
+While IL policies extend RL agents to scenarios where
+no reward function can be designed, they also suffer from a
+number of drawbacks. For instance, BC suffers distributional
+shift and causal confusion [14], while IRL is never guaranteed
+to learn an optimal reward model [15]. A solution to these
+problems is adversarial imitation learning , where a policy
+Fig. 1. A visual explanation of our proposed method. At timestep t, the
+current observation is fed to the imitation learning policy network to obtain a
+policy action distribution. Concurrently, we retrieve a number of resembling
+frames from the expert data and compute an expert action distribution. The two
+distributions are then combined to obtain a joint, adapted action distribution.
+Finally, the action is selected by sampling from the joint distribution.
+is trained by learning two networks simultaneously in an
+adversarial fashion. The most notable examples of adversar-
+ial algorithms are generative adversarial imitation learning
+(GAIL) [17] and adversarial inverse reinforcement learning
+(AIRL) [18]. GAIL and AIRL take inspiration from gen-
+erative adversarial networks (GANs) [19]. Specifically, both
+algorithms train a policy along with a discriminator that tries
+to distinguish between policy-generated and expert-generated
+trajectories [17], [18]. AIRL differs from GAIL as it also
+derives a reward function. Both algorithms have significantlyarXiv:2406.04913v1  [cs.AI]  7 Jun 2024improved the performance of autonomous agents in a wide
+range of tasks. Still, adversarial training is unstable and sample
+inefficient [17]–[19], that is, an adversarial agent might never
+learn a useful policy, and will typically require very long
+training procedures.
+Additionally, a range of challenges still require a general
+solution. For instance, autonomous agents should be able to
+model long-term, causal relationships and plan their actions
+accordingly [1], [20]. Model-based RL attempts to solve
+these problems by learning an implicit representation of the
+environment [20]. More recently, OpenAI proposed Video
+PreTraining (VPT) [3], a transformer-based [21], causal model
+to play Minecraft from human demonstrations. VPT was ca-
+pable of solving long-standing challenges such as the MineRL
+Diamond challenge [22]. Similarly, recently proposed Dreamer
+architectures [4], [5] merge several network architectures and
+combine IL and DRL methods to learn a world model to
+operate informed decisions.
+While agents such as VPT and Dreamer indeed achieve
+outstanding results, they are bounded to use complex archi-
+tectures [3]–[5] or need massive datasets to be trained suc-
+cessfully [3]. Therefore, their usability in real world scenarios
+remain uncertain.
+In real world use cases, usually gathering data is expensive
+and demands massive resources [25]–[27]. Hence, autonomous
+agents should be able to learn from small dataset, while being
+robust to unpredictable conditions and aligned to human needs.
+Previous research in this direction have leveraged search as a
+way to reliably and efficiently select actions [23], [24]. For
+example, a robotic arm in a low-dimensional domain with
+continuous action space can average over a set of retrieved
+relevant actions [23]. In the case of an open-world, high-
+dimensional visual domain with discrete actions, copying a
+sequence of actions from relevant past experience of an expert
+has been proven successful [24]. Despite showing robust
+performance, such methods lack real time adaptability to
+unpredictable conditions.
+Inspired by this previous research, we propose Bayesian
+online adaptation (BOA), an efficient technique to improve
+an IL agent action selection process using search, requiring
+little to none scaling in network complexity. Our approach is
+explained visually in Fig. 1. BOA leverages Bayesian statistics
+and search to improve the performance of pure IL agents.
+Additionally, our method allows a partial explanation of the
+action selection process, hence improving interpretability of
+the model.
+II. P RELIMINARIES
+a) Reinforcement Learning: We model our control prob-
+lem as a partially observable Markov decision problem
+(POMDP) as a 7-tuple (S, A, T, R, Ω, O, γ )where S⊂Rd
+is the state space, Ais the action space, T:S×A→Sis the
+transition dynamics, R:S×A→Ris the reward function, Ω
+is a set of observations, Ois a set of conditional observation
+probabilities and γ∈[0,1)is the discount factor.b) Imitation Learning: In the IL scenario, the reward
+function Rand the transition dynamics Tare unknown. As
+such, a policy can not acquire relevant experience by interact-
+ing with the environment. Instead, a dataset of observation-
+action pairs D={(ot, at)},D ⊂S×Awitht∈[0, τ], τ∈N
+is provided by an expert demonstrating the task. The general
+aim of an IL policy is to minimize a loss L:A×A→Rthat
+describes the difference between the policy predicted actions
+and the expert actions.
+c) Multinomial Distribution: The Multinomial distribu-
+tion is a parametric, discrete distribution characterized by two
+parameters KandN.Kis often referred to as classes or
+categories , while Nindicates the number of trials. Given a
+random variable X∼(N;p1, . . . , p K), the distribution has a
+discrete probability density function of the form
+P(X=x) =N!QK
+i=1xi!KY
+i=1pxi
+i (1)
+Whenever N= 1, the Multinomial distribution becomes a
+Categorical distribution.
+d) Dirichlet Distribution: The Dirichlet distribution is
+a parametric distribution defined by a scalar parameter K
+and a vector parameter α, called categories andconcentration
+respectively. The probability density function is
+f(x;α) =1
+B(α)KY
+i=1xαi−1
+i (2)
+where B(α)is the multivariate beta function.
+Among its other properties, the Dirichlet distribution is the
+conjugate prior of the Multinomial distribution. That is, if in
+Bayesian inference the prior follows a Dirichlet distribution
+and the likelihood follows Multinomial distribution, then the
+posterior is known to also follow a Dirichlet distribution.
+III. P ROPOSED METHOD
+Our method leverages Bayesian inference to update the
+beliefs of an autonomous agent in real-time. The intuition is
+as follows: in general, an IL agent tries to imitate the expert’s
+action distribution, given an observation. It follows that IL
+works as long as the dataset fully encapsulates the dynamics
+of a task. Whenever this condition is not satisfied, an IL agent
+is bound to either fail or show sub-optimal behavior [13], [14].
+To mitigate this problem, we provide a learning-based agent
+with a minibatch of expert solutions for a particular state.
+Then, we infer the probable action of the expert and update
+the agent action distribution accordingly.
+A. Search
+Similar to Zero-shot Imitation Policy (ZIP) [24], as a
+preliminary step we encode the expert demonstrations dataset
+using a pre-trained encoder h(·)inspired from VPT. Details
+of the encoder we have used are provided in Section VII. For
+each trajectory iand for each timestep t, we pass the expert
+state s(i)
+tto obtain a latent z(i)
+t=h(s(i)
+t). Each latent is then
+paired with its corresponding action a(i)
+t. Thus, we define theFig. 2. Screenshots from the 10MiniWorld environments used in our experiments. MiniWorld uses minimal graphics, while still providing variance in the
+visual domain. From left to right, top to bottom: CollectHealth, FourRooms, Hallway, MazeS3, OneRoom, PutNext, Sidewalk, TMaze, WallGap, YMaze.
+Images are upscaled to 800×600 for visual clarity.
+expert latent space DE={(z(i)
+t, a(i)
+t)}as the set of encoded
+observation-action pairs of expert trajectories.
+During inference, at each timestep twe encode the current
+observation o∗
+t, obtaining z∗
+t=h(o∗
+t), and retrieve the k-most
+similar latents from DE. Then, we count the number of occur-
+rences of each action and store them in a vector ct. Finally,
+we model the expert action distribution as πE(a(E)
+t|st), where
+πE(a(E)
+t=i|st) =c(i)
+t
+k.
+B. Bayesian Online Adaptation
+At timestep t, an agent (that is, a policy θ) observes a
+state stand selects a discrete action a(θ)
+t. We can model the
+prior distribution πθ(a(θ)
+t|st)as a Dirichlet distribution with
+K=|A|components and concentration vector αprior with
+αprior,i=πθ(a(θ)
+t=i|st). That is, each pseudo-count is the
+probability of the corresponding action as inferred by the IL
+agent.
+We formulate our inference problem as a Bayesian adapta-
+tion problem. Our aim is to update the beliefs of an IL agent,
+given a set of actions retrieved from the expert. Therefore,
+given the prior πθ(a(θ)
+t|st), we would need to find the likeli-
+hood πE(a(E)
+t|a(θ)
+t, st)to estimate the posterior.
+In our adaptation setting, a(E)
+tis selected by feature similar-
+ity search between the current encoded observation z∗
+tand the
+previously encoded expert latents. Since z(i)
+t=h(s(i)
+t), clearly
+a(E)
+tis conditionally dependent on s(i)
+t, i.e.πE(a(E)
+t|st). Con-
+versely, in our pipeline the action selected by the policy a(θ)
+t
+does not affect the choice of a(E)
+t. Therefore, we can safely
+state that, in our setting, a(E)
+tis conditionally independent
+from a(θ)
+t. Therefore
+πE(a(E)
+t|a(θ)
+t, st) =πE(a(E)
+t|st). (3)
+Thus, we can use the result of our search as likelihood. Lever-
+aging the fact that the Dirichlet distribution is the conjugate
+prior of the Multinomial distribution, we can state that the pos-
+terior πE(a(θ)
+t|a(E)
+t, st)also follows the Dirichlet distribution
+withKcomponents and an updated αposterior =αprior+ct.Given that ∀i,αprior,i∈[0,1]while∀i, c(i)
+t∈N, we argue
+thatαposterior might be unbalanced towards ct, hence giving
+more importance to πE(a(E)
+t|st). To balance the terms, we
+multiply each αprior,iby the number of searched vectors k,
+so that αposterior =k·αprior+ct.
+Finally, we can sample the Dirichlet posterior
+Dir(K,αposterior )and obtain a Categorical distribution
+Cat(αposterior ). From this, the new action ˜atcan be obtained
+by sampling
+˜at∼Cat(αposterior ). (4)
+C. Search complexity
+Autonomous agents should act within a very short, constant
+amount of time. When introducing search for inference, a
+dependency on the complexity of the search space follows
+from it. In general, the more complex and dense the search
+space, the longer the query time.
+In our work, we mitigate this dependency using faiss [28],
+a library for efficient search leveraging GPUs. faiss provides
+methods for both exact and approximate search. In our study,
+we encode the expert trajectories into d-dimensional vectors
+and project them in a search space with the same dimension.
+Then, we use (exact) L2 search to retrieve the kclosest sam-
+ples to the current observation. In our experiments, faiss was
+able to handle as many as 150trajectories without significant
+delays in inference time (average search time 6.37±0.933ms).
+IV. E XPERIMENTS
+We compare five agents, namely PPO [29], BC [14],
+GAIL [17], ZIP [24], and BOA on a range of tasks from
+MiniWorld [30], a modular and customizable library with 3D
+minimalistic graphics for fast rendering. MiniWorld features
+tasks of varying complexity to test diverse skills, such as
+navigation, memory and planning. Our experiments are run
+on10tasks that provide an explicit terminal condition and
+access to a scalar reward. A more detailed description of the
+goals for each environment is provided in Section VIII. All
+environments provide 60×80RGB observations with integerpixel values in the range [0,255]. In our study, we apply
+minimal pre-processing to the images by simply scaling the
+pixel down to lie within [0,1]range. Fig. 2 shows an example
+of observation from each environment.
+We manually collected 20trajectories for each task and
+trained all agents on the same dataset within a task. All agents
+used the same encoder within a task, empirically chosen to be
+a VPT-inspired [3] encoder architecture with a residual [32]
+backbone and no attention obtained by training GAIL.
+As a preliminary step, we study the hyperparameters of our
+approach, namely, the number kof retrieved samples during
+search and the number of trajectories encoded in latent space.
+We test k={1,5,10,15,20,30,40,50,60,70,80,90,100},
+and estimate the best value for each task by letting a BOA
+agent play 3runs of 30episodes per value, using all available
+data. We repeat this test for both GAIL-based and BC-based
+BOA, as the two IL algorithms treat the action distribution
+differently. In particular, BC tends to be overconfident in its
+predictions [14], while GAIL predictions are usually much
+smoother [17].
+To evaluate the effect of the number of encoded trajecto-
+ries on performance, we manually gather an additional 130
+trajectories for the MazeS3 task, up to a total of 150. Then,
+we assess the performance of BOA using 1-150 trajectories,
+incrementing the number of encoded trajectories by 5each
+time. For this test, we use the environment-wise optimal value
+ofkfound in the previous step and test each configuration
+over5runs of 30episodes each.
+Additionally, we compare our agents by observing their
+mean episodic return on each task. We enforce here that in
+our setting IL and adapted agents never observe the reward ,
+and that we collect it for the sole purpose of comparing
+performance. The only agent using the reward signal during
+training is PPO. We extensively test the agents on 6runs of
+100episodes for each task.
+The source code to reproduce the experiments can be found
+at https://github.com/fmalato/online adaptation.
+V. R ESULTS
+In the first part of this section we study how varying
+the hyperparameters of our approach affect performance. In
+the second subsection, we establish a numerical comparison
+between the tested agents.
+A. Hyperparameters ablation
+Fig. 3 and 4 show the ablation study over the number of
+retrieved samples kand the number of encoded trajectories n,
+respectively.
+a) Number of retrieved samples: Fig. 3 compares
+BOA+BC and BOA+GAIL on each environment as the num-
+ber of retrieved examples kincreases. Overall, no significant
+trend is visible, and no agent consistently dominates the other.
+If we consider only GAIL, though, we can notice that in most
+environments performance is stronger when kis small.
+We explain this descending pattern as a joint effect of the
+learned latent representation and the expert trajectories. Inparticular, whenever the counts vector cthasc(i)
+t=kfor some
+value of k, the retrieved sample is heavily polarized towards
+action i. In this case, the expert will influence αposterior
+the most. On the other hand, if the expert-provided dataset
+includes similar observations with different actions, the effect
+of the expert on the posterior will, in general, be mitigated.
+Still in this case, if kis small enough, the action distribution
+has a significant chance of being sharp, hence having a sensible
+effect over αposterior . Considering that such a descending
+effect is seen for the most part in maze exploration tasks,
+where similar observations might carry different actions (e.g.
+when facing a wall, an agent can either turn left or right),
+the dominance for small values of kis clear. On the contrary,
+when the environment is simple enough (e.g. Hallway) or is
+less likely to encounter the above-described situation, the agent
+show more robust performance when varying k.
+b) Number of encoded trajectories: In Fig. 4 we observe
+how the number of encoded trajectories affects the success
+rate of both adapted agents. Following from the findings of
+the previous paragraph, we adopt k= 1 for BOA+GAIL and
+k= 5 for BOA+BC. The dominance of BOA+GAIL over
+BOA+BC visible in Fig. 4 confirms the result of the previous
+experiment, where BOA+GAIL succeded 44.00%±6.48% of
+the times, while BOA+BC yielded a mean success rate of
+30.00%±2.72%. Overall, changing ndoes not seem to affect
+any of the adapted agents, even though a faint trend seems to
+suggest that BOA+BC would benefit from additional data.
+The best performance of BOA+GAIL is 56.00%±5.96%
+(n= 40 ), while the worst mean success rate is 39.34%±9.25%
+(n= 130 ). As for BOA+BC, the best and worst results are
+38.67%±6.06% (n= 90 ) and 24.66%±3.80% (n= 50 )
+respectively.
+B. Numerical performance
+Fig. 5 shows the average return for each tested agent. At
+first glance, BOA agents either outperform or match the per-
+formance of their corresponding IL agent in all environments.
+Notably, the adaptation generally improves the reward even
+when the underlying IL policy catastrophically fails.
+From Fig. 5 we see how PPO is able to complete a
+good portion of the exploration tasks, except for TMaze and
+WallGap. Still, PPO does not achieve reliable performance
+in any of them. We hypothesize this is due to the sparse
+nature of the reward. Our other baseline, ZIP, achieves strong
+performance on every task except PutNext. We believe this
+follows from the inherent difficulty of the environment that,
+unlike all the others, requires two sequential steps to achieve
+the goal.
+GAIL and BC solve some of the tasks with acceptable
+results and fail in others. We suppose that in those cases,
+BC fails in environments where data does not extensively
+encapsulate the complexity of the environment, while GAIL
+failures are due to its inherent instability.
+As expected, both BOA agents improved the capabilities
+of their corresponding IL policies. BOA+BC achieves almost-
+zero performance only in TMaze and PutNext. We suspect15202530354045CollectHealth
+1520253035404550FourRooms
+9092949698100Hallway
+1520253035404550MazeS3
+BOA+BC
+BOA+GAIL
+405060708090OneRoom
+0 25 50 75 100024681012PutNext
+0 25 50 75 1003040506070Sidewalk
+0 25 50 75 1000510152025TMaze
+0 25 50 75 10005101520WallGap
+0 25 50 75 100010203040506070YMaze
+Retrieved examplesSuccess rate (%)Fig. 3. Mean success rate for different numbers of retrieved samples. Each graph corresponds to one environment. Measurements retrieved on 3runs of 30
+episodes each. The best value is marked with a star. Red lines represent a BOA agent adapting GAIL agent, while a blue line denotes a BC agent adapted
+with BOA.
+TABLE I
+BEST CHOICE OF kFOR ADAPTED AGENTS BOA+GAIL AND BOA+BC FOR EACH ENVIRONMENT ,WITH ASSOCIATED MEAN SUCCESS RATE .
+CollectHealth FourRooms Hallway MazeS3 OneRoom PutNext Sidewalk TMaze WallGap YMaze
+BOA
++GAILk 40 1 70 1 15 20 5 1 70 1
+Success
+Rate (%)39.67
+±2.0541.33
+±2.0597.67
+±1.7044.00
+±6.4870.00
+±3.7410.00
+±0.8273.33
+±2.0523.33
+±3.3011.11
+±4.1623.00
+±1.41
+BOA
++BCk 15 60 1 5 10 60 60 1 90 30
+Success
+Rate (%)40.00
+±5.4438.89
+±9.5699.00
+±0.8230.00
+±2.7285.56
+±1.573.33
+±2.7254.44
+±7.868.89
+±4.1615.56
+±7.8655.56
+±13.97
+0 30 60 90 120 150
+Expert trajectories encoded203040506070Avg. success rate (%)BOA+GAIL
+BOA+BC
+Fig. 4. Mean success rate for different numbers of encoded trajectories. The
+test is conducted on both BOA+BC (in blue) and BOA+GAIL (red line) on
+5runs of 30episodes each. nvaries between 1and150. We highlight the
+best value for each agent with a star-shaped mark.
+this happens for two reasons: first, BC completely fails on the
+task; second, the IL policy assigns a very high probability to
+the selected action, leading the adaptation to fail as well. Whenthis is not true, such as for GAIL, we see how the adaptation
+still improves the results.
+These findings confirm our hypothesis: while selecting
+actions directly from the expert distribution is likely to yield
+better results, adapting IL agents with search on the expert
+data improves performance. Nonetheless, while ZIP blindly
+copies actions based on past situations, BOA always takes
+into account the possibility of different situations. In a more
+unpredictable and complex scenario we expect BOA to per-
+form better than ZIP, as suggested by the PutNext task. We
+motivate this claim with the following reasoning.
+ZIP assumes that an expert can provide optimal solutions
+to any situation within a specified task. Therefore, ZIP will
+reliably solve tasks that are represented at least once within
+the expert dataset. As the complexity of the task increases, ZIP
+will either require a much larger expert dataset or encounter
+limitations. On the contrary, an IL policy should be able to
+generalize its knowledge, thus being capable of addressing
+some shortcomings of the expert dataset. In such setting,
+problems are likely to arise whenever a certain situation is-100 20 40 60 80 100 120PPOZIPBCBOA+BCGAILBOA+GAILCollectHealth FourRooms Hallway MazeS3 OneRoom
+-0.10 0.2 0.4 0.6 0.8 1.0 1.2PPOZIPBCBOA+BCGAILBOA+GAILPutNext
+-0.10 0.2 0.4 0.6 0.8 1.0 1.2Sidewalk
+-0.10 0.2 0.4 0.6 0.8 1.0 1.2TMaze
+-0.10 0.2 0.4 0.6 0.8 1.0 1.2WallGap
+-0.10 0.2 0.4 0.6 0.8 1.0 1.2YMaze
+RewardAgentFig. 5. Average reward comparison over the 10selected tasks. Higher is better. In all environments, the reward is in the range [0,1]except for CollectHealth ,
+where the reward is in [−2,+∞). We highlight BOA agents with striped bars and link them to the corresponding IL agent by matching the color of the bar.
+Grey bars represent baseline methods.
+under-represented in the dataset.
+BOA complements the two approaches: on one hand, it
+is capable of addressing the under-representation problem of
+IL methods thanks to search; on the other hand, it allows
+generalization in situations where the encoded experience is
+contradictory. Still, BOA needs a softer search mechanism
+than ZIP to allow generalization. As such, BOA might fall
+short of ZIP in simple tasks, but is bound to improve on
+complex ones such as PutNext . Most importantly, BOA always
+improve its underlying policy thanks to search, while keeping
+generalization capabilities intact.
+C. Perceptual evaluation
+As an additional set of experiments, we evaluate the adapted
+agents perceptually. To support the statements of this subsec-
+tion, we have released a video on our YouTube channel (visible
+at https://youtu.be/WoWalj4CVmM). Moreover, to keep the
+amount of visual material limited and the evaluation concise,
+we evaluate three environments with diverse purposes, namely
+FourRooms for navigation, PutNext for the sequential tasks,
+and CollectHealth to evaluate the survival skills. For each
+environment, we watch 10episodes played by ZIP, followed
+by BC and GAIL, and finally by BOA+BC and BOA+GAIL.
+a) FourRooms: According to our evaluation, ZIP pos-
+sesses the best ”human-like” skills: if it gets stuck in front of
+a wall, it will most likely recover and can confidently pass
+through doors. Still, when seeing the red box, in a significant
+number of instances, ZIP has ignored it. This is a consequence
+of action copy: if a new search is triggered while the red box
+is in sight, ZIP will reach the goal. Otherwise, the new search
+will likely lead to more exploration.
+Despite being tested as stochastic, BC will likely get stuck.
+The agent possesses decent navigation skills, but the overcon-
+fidence in its prediction will make it often fixate on a single
+action. As expected, GAIL possesses better navigation skills
+and can confidently explore. While it also gets stuck at times,
+it is much more likely to recover than BC.The first clear difference between both BOA agents and
+the other agents is that whenever the red box is spotted,
+they actively aim for it. Judging from the behavior of the
+plain IL policies, this is likely an effect of the adaptation.
+Between BOA+BC and BOA+GAIL, the latter possesses the
+best navigation skills. While BOA+BC can confidently nav-
+igate (resembling ZIP sometimes), it can not overcome door
+obstacles.
+b) PutNext: ZIP can confidently explore the room. Ad-
+ditionally, it usually picks up some block and drops it next
+to another. Still, the case where those two coincide with a
+yellow and red block is low, hence probability of success is
+even lower.
+BC aims for a block most of the time but then fails to pick
+it up. We suspect this is a consequence of the unbalance in
+data, as pick up and drop actions are well under-represented
+with respect to movement actions. GAIL also seems to be
+aiming for blocks and can sometimes pick them up, but its
+actions resemble more a slightly conditioned random policy
+than a confident one. We suspect that in this case, the training
+collapsed.
+BOA agents show interesting and complementary behavior.
+Specifically, while this would need to be confirmed further
+with additional experiments, BOA+BC seems to actively aim
+for the yellow box and, sometimes, picks it up. Then, it is
+unable unlikely to drop it. On the contrary, BOA+GAIL can
+pick up any block and, sometimes, drop it near another. Still,
+it does not seem to actively look for the yellow one.
+c) CollectHealth: ZIP shows confident exploratory be-
+havior and is capable of picking up a couple of health kits
+before dying.
+BC mostly turns right. At times, it attempts to aim for a
+health kit, but the rapidity of the environment does not allow it
+to pursue the goal. GAIL is more confident in walking towards
+health kits, but only sometimes manages to pick one up.
+BOA+BC corrects the turning behavior of plain BC and al-
+lows the agent to reach, sometimes, for a health kit. Similarly,
+BOA+GAIL can aim for health kits, but only sometimes it canreach one.
+VI. C ONCLUSIONS
+We have presented Bayesian online adaptation (BOA), a
+hybrid search-learning approach for adapting an imitation
+learning agent in real-time via search on expert-provided data.
+We have shown how our approach performs better than pure
+IL agents while falling short of action copy. Regardless, BOA
+agents carry the advantage of potentially being able to adapt to
+unpredictable situations, leveraging their underlying IL policy.
+Future research could investigate the effect of adaptation on
+RL agents such as PPO, or how to improve training time of
+RL agents by using adapted actions during training. Another
+direction could study balancing the effect of the adaptation
+based on the relevance of each retrieved sample. Finally,
+combining BOA with classical RL algorithms could prove
+adaptation as a versatile strategy to boost learning and improve
+sample efficiency.
+Other than improving performance, BOA implicitly ad-
+dresses the problem of explainability in machine learning.
+While being far from solving it, such a hybrid approach
+can always track the effect of the expert-retrieved samples,
+hence providing additional insight into the action selection
+process. For instance, during our perceptual evaluation, we
+noticed that in some instances the effect of the adaptation
+was immediately clear. Thus, an interesting future research
+direction could leverage this intuition to enhance explainable
+agents.
+REFERENCES
+[1] R. S. Sutton, A. G. Barto, “Reinforcement learning: an introduction,”
+The MIT Press, 2nd Edition, 2018.
+[2] K. Arulkumaran, M. P. Deisenroth, M. Brundage, A. A. Bharath, “A
+Brief Survey of Deep Reinforcement Learning,” in IEEE Signal Process-
+ing Magazine, Special Issue on Deep Learning for Image Understanding,
+2017.
+[3] B. Baker, I. Akkaya, P. Zhokhov, J. Huizinga, J. Tang, A. Ecoffet, B.
+Houghton, R. Sampedro, J. Clune, “Video PreTraining (VPT): Learning
+to Act by Watching Unlabeled Online Videos,”, in arXiv, 2022.
+[4] D. Hafner, T. Lillicrap, M. Norouzi, J. Ba, “Mastering Atari with
+Discrete World Models,” at International Conference on Learning Rep-
+resentations, 2021.
+[5] D. Hafner, J. Pasukonis, J. Ba, T. Lillicrap , “Mastering Diverse Domains
+through World Models,” in arXiv, 2023.
+[6] P. Christiano, J. Leike, T. B. Brown, M. Martic, S. Legg, D. Amodei,
+“Deep reinforcement learning from human preferences,” in arXiv, 2017.
+[7] A. Kanervisto, J. Karttunen, V . Hautam ¨aki, “Playing Minecraft with
+Behavioral Cloning,” at NeurIPS Competitions & Demonstrations Track,
+2019.
+[8] A. Kanervisto, J. Pussinen, V . Hautam ¨aki, “Benchmarking End-to-End
+Behavioural Cloning on Video Games,” in IEEE CIG, vol. 2020-August,
+2020.
+[9] O. Vinyals, I. Babuschkin, W. M. Czarnecki, et al., “Grandmaster level
+in StarCraft II using multi-agent reinforcement learning,” in Nature 575,
+350–354, 2019.
+[10] B. R. Kiran, I. Sobh, V . Talpaert, P. Mannion, A. A. Al Sallab, S.
+Yogamani, P. P ´erez, “Deep Reinforcement Learning for Autonomous
+Driving: A Survey,” in IEEE Transactions on Intelligent Transportation
+Systems, 2020.
+[11] J. Degrave, F. Felici, J. Buchli, et al., “Magnetic control of tokamak
+plasmas through deep reinforcement learning,” Nature 602, 414–419,
+2022.
+[12] K. Arulkumaran, M. P. Deisenroth, M. Brundage and A. A. Bharath,
+“Deep Reinforcement Learning: A Brief Survey,” in IEEE Signal Pro-
+cessing Magazine, vol. 34, no. 6, pp. 26-38, Nov. 2017.[13] B. Zheng, S. Verma, J. Zhou, I. Tsang, F. Chen, “Imitation Learning:
+Progress, Taxonomies and Challenges,” in arXiv, 2021.
+[14] F. Torabi, G. Warnell, P. Stone, “Behavioral cloning from observations,”
+at IJCAI, 2018.
+[15] S. Arora, P. Doshi, “A Survey of Inverse Reinforcement Learning:
+Challenges, Methods and Progress,” in arXiv, 2018.
+[16] A. Y . Ng, S. J. Russell, “Algorithms for Inverse Reinforcement Learn-
+ing,” in ICML ’00, Morgan Kaufmann Publishers Inc., San Francisco,
+CA, USA, 663–670, 2000.
+[17] J. Ho, S. Ermon, “Generative Adversarial Imitation Learning,” at
+NeurIPS, 2017.
+[18] J. Fu, K. Luo, S. Levine “Learning Robust Rewards with Adversarial
+Inverse Reinforcement Learning,” at ICLR, 2018.
+[19] I. J. Goodfellow, J. Pouget-Abadie, M. Mirza, B. Xu, D. Warde-Farley,
+S. Ozair, A. Courville, Y . Bengio, “Generative Adversarial Networks,”
+in Proceedings of NeurIPS. pp. 2672–2680, 2014.
+[20] T. M. Moerland, J. Broekens, A. Plaat and C. M. Jonker, “Model-
+based Reinforcement Learning: A Survey,” Foundations and Trends®
+in Machine Learning: V ol. 16: No. 1, pp 1-118, 2023.
+[21] A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez,
+L. Kaiser, I. Polosukhin, “Attention is All You Need,” at NeurIPS, 2017.
+[22] A. Kanervisto, S. Milani, K. Ramanauskas, N. Topin, Z. Lin, J. Li, et al.,
+“MineRL Diamond 2021 Competition: Overview, Results, and Lessons
+Learned,”, in Proceedings of Machine Learning Research 176:13–28,
+2022.
+[23] J. Pari, N. M. Shafiullah, S. P. Arunachalam, L. Pinto, “The Surpris-
+ing Effectiveness of Representation Learning for Visual Imitation,” in
+Proceedings of Robotics: Science and Systems, 2021.
+[24] F. Malato, F. Leopold, A. Melnik, V . Hautam ¨aki, “Zero-shot Imitation
+Policy via Search in Demonstration Dataset,” at ICASSP 2024, Seoul,
+Korea, Republic of, pp. 7590-7594, 2024.
+[25] L. Fan, G. Wang, Y . Jiang, A. Mandlekar, Y . Yang, H. Zhu, A. Tang,
+D. Huang, Y . Zhu, A. Anandkumar, “MineDojo: Building Open-Ended
+Embodied Agents with Internet-Scale Knowledge,” at NeurIPS, 2022.
+[26] S. Milani, A. Kanervisto, K. Ramanauskas, S. Schulhoff, B. Houghton,
+R. Shah, “BEDD: The MineRL BASALT Evaluation and Demonstra-
+tions Dataset for Training and Benchmarking Agents that Solve Fuzzy
+Tasks,” at NeurIPS 2023 Datasets and Benchmarks Oral, 2023.
+[27] R. Gozalo-Brizuela, E. C. Garrido-Merchan, “ChatGPT is not all you
+need. A State of the Art Review of large Generative AI models,” in
+arXiv, 2023.
+[28] M. Douze, J. Johnson, H. J ´egou, “Billion-scale similarity search with
+GPUs,” in IEEE Transactions on Big Data, vol.7, No. 3, pp 535-547,
+2019.
+[29] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, O. Klimov, “Proximal
+policy Optimization Algorithms,” in arXiv, 2017.
+[30] M. Chevalier-Boisvert, B. Dai, M. Towers, R. de Lazcano, L. Willems,
+S. Lahlou, S. Pal, P. Samuel Castro, J. Terry, “Minigrid & Miniworld:
+Modular & Customizable Reinforcement Learning Environments for
+Goal-Oriented Tasks,”, in CoRR, abs/2306.13831, 2023.
+[31] C. Burns, P. Izmailov, J. H. Kirchner, B. Baker, L. Gao, L. Aschen-
+brenner, Y . Chen, A. Ecoffet, M. Joglekar, J. Leike, I. Sutskever, J.
+Wu, “Weak-to-Strong Generalization: Eliciting Strong Capabilities With
+Weak Supervision,” in arXiv, 2023.
+[32] K. He, X. Zhang, S. Ren and J. Sun, “Deep Residual Learning for Image
+Recognition,” in IEEE CVPR, Las Vegas, NV , USA, pp. 770-778, doi:
+10.1109/CVPR.2016.90, 2016.
+[33] V . Mnih, K. Kavukcuoglu, D. Silver, et al. “Human-level control through
+deep reinforcement learning,” in Nature 518, 529–533, 2015.
+VII. A PPENDIX A - E NCODER DETAILS
+As stated in Section III-A, in our study we use a VPT-
+inspired encoder h(·)to build the latent search space. We
+have designed our encoder with two purposes in mind: on one
+hand, we want a temporally extended representation to better
+characterize each state; on the other hand, we want to keep
+the architecture as shallow as possible, to keep our architecture
+easily trainable on consumer hardware with small datasets.
+The original VPT architecture is built on top of the Inverse
+Dynamics Model (IDM) [3] for predicting actions from obser-vations. The input to both models is a stack of 128,128×128
+RGB frames. IDM features a 3D convolution followed by three
+residual stacks and two fully connected layers with 256 and
+4096 activations, respectively. Each residual stack is composed
+of a 2D convolution with max pooling and two residual
+blocks as described in [32]. The output is then forwarded
+to four transformer heads which build long-term relationships
+between frames. With respect to IDM, VPT removes the 3D
+convolution layer.
+In our work, we use the same architecture as IDM, up to
+the two fully connected layers. Differently from IDM, our
+FC layers feature 2048 and1024 activations. Additionally,
+we retain the 3D convolution layer but use a stack of 4,
+60×80RGB images as input to encapsulate temporally close
+dependencies, similarly to [33]. As a result, our encoder is
+composed of 50Mparameters, a 90% reduction with respect
+to IDM/VPT.
+VIII. A PPENDIX B - E NVIRONMENTS DESCRIPTION
+We provide a short description for each of the 10tasks used
+in the study. An example of each environment is provided in
+Fig. 2.
+We use 7unique navigation tasks in our experiments. They
+all share the same goal, that is, reaching a randomly-spawned
+red box. The reward is +(1−0.2∗t
+T)upon reaching the
+red box, where tis the current number of timesteps and Tis
+the maximum duration of an episode; 0otherwise. The action
+space is discrete, 3-dimensional featuring actions {left,right ,
+forward }. We provide a brief description of each.
+•FourRooms: Four rooms with chess floor tiles, grey walls
+and ceiling, connected in a quadrant pattern.
+•Hallway: One rectangular room with chess floor tiles,
+grey walls and ceiling.
+•MazeS3: Three randomly-generated rooms connected
+with corridors. MazeS3 features chess tiles, red brick
+walls and grey ceiling.
+•OneRoom: One big squared room with chess floor tiles,
+grey walls and ceiling.
+•TMaze: Two corridors connected in a T pattern. Goal
+position is randomly spawned on either branch of the T.
+•WallGap: Two rooms with no ceiling connected with a
+gap in a wall. Agent spawns in one room, red box in the
+other.
+•YMaze: Similar to TMaze, but arranged in the shape of
+a ”Y”.
+Additionally, we use three tasks with different rules. Their
+descriptions are as follows.
+Name: CollectHealth
+•Description: The environment is composed of a single
+room with green floor and grey walls and ceiling. Scat-
+tered all over the floor are health kits.
+•Goal: Survive as long as possible.
+•Action space: Discrete, 8-dimensional. Actions: {left,
+right ,forward ,backwards ,pick up ,drop,toggle ,com-
+plete}.•Rules: Agent has an initial health of 100. After each
+timestep, health decreases by 2. If health reaches 0, the
+agent dies. Whenever an agent collects a health kit, its
+health is restored back to 100. Collecting a health kit
+requires actively performing a pick up action.
+•Reward :+2for each timestep; −100for dying.
+Name: PutNext
+•Description: One big, squared room with chess tiles, grey
+wall and ceiling, filled with colored boxes.
+•Goal: Place the yellow box next to the red box.
+•Action space: Discrete, 8-dimensional. Actions: {left,
+right ,forward ,backwards ,pick up ,drop,toggle ,com-
+plete}.
+•Rules: An agent reaches the yellow box and performs a
+pick up action. Then, the agent must navigate to the red
+box and perform a drop action.
+•Reward :+(1−0.2∗t
+T)when red and yellow boxes are
+close; 0otherwise.
+Name: Sidewalk
+•Description: One rectangular room opened on one side.
+The opened side is delimited with traffic cones. Red-brick
+walls, grey floor and no ceiling.
+•Goal: Reach the red cube within the time limit.
+•Action space: Discrete, 3-dimensional. Actions: {left,
+right ,forward }.
+•Rules: Navigate the maze to reach the goal location. If
+the agent steps out of the sidewalk, it dies.
+•Reward :+(1−0.2∗t
+T)when the goal is reached; 0
+otherwise.

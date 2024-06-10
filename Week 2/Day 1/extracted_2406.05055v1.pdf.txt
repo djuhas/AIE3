@@ -1,0 +1,1234 @@
+Robustness Assessment of Mathematical Reasoning in
+the Presence of Missing and Contradictory Conditions
+Shi-Yu Tian12†, Zhi Zhou1†, Lin-Han Jia1, Lan-Zhe Guo13‡, Yu-Feng Li12‡
+1National Key Laboratory for Novel Software Technology, Nanjing University
+2School of Artifical Intelligence, Nanjing University
+3School of Intelligence Science and Technology, Nanjing University
+tiansy7@foxmail.com, zhouz@lamda.nju.edu.cn
+†Equal Contribution‡Corresponding Author
+Abstract
+Large language models (LLMs) have demonstrated impressive performance on
+reasoning tasks, which can be further improved through few-shot prompting tech-
+niques. However, the current evaluation primarily focuses on carefully constructed
+benchmarks and neglects the consideration of real-world reasoning problems that
+present missing and contradictory conditions, known as ill-defined problems. Our
+observations suggest that existing few-shot prompting techniques are ineffective
+in such scenarios, often providing overconfident answers or hallucination. To
+further study this problem, we develop a benchmark called Problems with Missing
+andContradictory conditions (PMC ) and introduce two novel metrics to evaluate
+the performance of few-shot prompting methods in these scenarios. Our analysis
+using the PMC benchmark reveals a trade-off dilemma between the performance
+of mathematical reasoning for well-defined problems and the ability to recognize
+ill-defined problems. To address the challenges posed by PMC , we propose a novel
+few-shot prompting method called SMT-LIBPrompting (SLP), which utilizes the
+SMT-LIB language to model the problems instead of solving them directly. Subse-
+quently, a double-check solving strategy checks the satisfiability and uniqueness of
+the solution and provides final feedback. Extensive experiments demonstrate the
+superiority of our SLPapproach compared to existing few-shot prompting methods
+when dealing with problems with missing and contradictory conditions. We will
+open-source our benchmark and code to facilitate future research.
+1 Introduction
+Recently, large language models (LLMs) have demonstrated impressive performance on challeng-
+ing reasoning tasks, including mathematical reasoning tasks [Hendrycks et al., 2021, Lewkowycz
+et al., 2022]. Their capabilities can be further enhanced through the use of few-shot prompting
+techniques such as chain-of-thought prompting (CoT) [Wei et al., 2022], program-aided language
+prompting (PAL) [Gao et al., 2023]. However, these techniques are mainly evaluated on carefully
+constructed and well-defined benchmark datasets [Cobbe et al., 2021, Hosseini et al., 2014, Koncel-
+Kedziorski et al., 2016, Patel et al., 2021], while neglecting the consideration of mathematical
+reasoning problems in the real world are often with missing, surplus and even contradictory condition
+issues [Puchalska and Semadeni, 1987].
+For example, the application of AI-assisted models is becoming increasingly popular in the fields
+of tax and legal consulting [Armour and Sako, 2020, Pavlova and Knyazeva, 2022, Roberts, 2024,
+Saragih et al., 2023]. These models require complete and detailed representations of input information.
+However, individuals often provide inadequate and contradictory information under pressure or when
+Preprint. Under review.arXiv:2406.05055v1  [cs.AI]  7 Jun 2024dealing with unfamiliar knowledge [Brown et al., 2009, Weller et al., 2008]. In these cases, LLMs
+prefer to produce overconfident answers that lack a logical basis due to hallucination problems rather
+than reject to answer the ill-defined problems(like Example 1), thereby substantially compromising
+the robustness of LLMs for real-world applications.
+Example 1: An example of ill-defined question and corresponding answer
+Ill-defined question: Two trains leave San Rafael at the same time. The next day, they travel
+northwards, covering 150 miles. What’s the distance covered by the first train in the two
+days? # Missing information about the speed of each vehicle separately
+GPT-3.5 answer: 150%
+GPT-3.5 (CoT) answer: Since both trains leave at the same time and travel the same distance,
+each train covers 150 miles in the two days. The answer is 150 miles. %
+To this end, we focus on investigating the robustness of LLMs in performing mathematical reasoning
+tasks using few-shot prompting methods, particularly when dealing with problems that present
+missing and contradictory conditions (i.e., ill-defined problems). We first construct an evaluating
+benchmark, namely, Problems with Missing and Contradictory conditions (PMC ). This benchmark
+dataset introduces mutations to four commonly used mathematical reasoning datasets by incorporating
+missing and contradictory problems, thereby resulting in eight distinct sub-datasets. Then, two novel
+metrics are introduced to evaluate the performance of LLMs and some few-shot prompting methods
+on our proposed PMC benchmark.
+By evaluating on PMC, we found that existing few-shot prompting techniques typically assume a
+priori that the problem is solvable, thus neglecting to model ill-defined problems. This leads to
+the identification of ill-defined problems entirely relying on the capabilities of the backbone model
+itself, leaving the algorithm with a trade-off dilemma of reasoning for well-defined problems and
+recognizing ill-defined problems (Section 4).
+Inspired by this, we propose a novel few-shot prompting method, namely, SMT-LIBPrompting (SLP),
+which models each problem using SMT-LIB language [Barrett et al., 2010] rather than directly solve
+them. Then, a double-check solving strategy is adopted to verify whether this problem is satisfiable
+and has a unique solution with SMT solver. With the help of SMT-LIB Prompting, we can effectively
+recognize and reject ill-defined problems to avoid the potential risks of overconfident but incorrect
+answers. Finally, if the problem is well-defined, we can obtain the valid answer utilizing the SMT
+solver.
+Our contribution can be summarized as follows:
+1)We investigate a novel problem related to mathematical reasoning, specifically focusing on
+problems that involve missing and contradictory conditions. This investigation is significant
+because of its practical applications in real-world scenarios.
+2)We develop a benchmark, named PMC , and propose two novel metrics for evaluating the effec-
+tiveness of few-shot prompting methods in addressing problems with missing and contradictory
+conditions.
+3)To address the challenges presented by PMC , we propose a novel few-shot prompting approach
+named SLP. This approach utilizes the SMT-LIB language to model the problems, allowing for the
+identification of ill-defined problems before LLMs provide overconfident but incorrect answers.
+4)We conduct comprehensive experiments and case analysis on our proposed SLPmethod as well
+as existing methods. The results demonstrate that our proposal outperforms existing prompting
+methods by a significant margin.
+2 PMC Benchmark
+In this section, we present our PMC benchmark in detail, which comprises two versions, i.e.,
+M (missing conditions) and C (contradictory conditions) versions, based on four common math
+2mathematical reasoning datasets. Then, we introduce the evaluation protocol and the metrics used to
+evaluate the LLMs’ performance.
+2.1 Dataset Construction
+We choose four common mathematical reasoning datasets, i.e., GSM8k [Cobbe et al., 2021],
+SV AMP [Patel et al., 2021], AddSub [Hosseini et al., 2014], and MultiArith [Koncel-Kedziorski
+et al., 2016], as the seed datasets to construct our benchmark. Specifically, we mutate the testing
+problems in the seed datasets to generate the M and C versions of our benchmark using the following
+three strategies:
+Example 2: An Example of PMC
+Statement: Gunter is trying to count the jelly beans in a jar. He asks his friends how many
+they think are in the jar. One says 80. Another says 20 more than half the first one. A third
+says 25% more than the first one. What is their average guess? # Excepted Answer: 80
+M Version: Gunter is trying to count the jelly beans in a jar. He asks his friends how many
+they think are in the jar. One says 80a certain number. Another says 20 more than half the
+first one. A third says 25% more than the first one. What is their average guess?
+C Version: Gunter is trying to count the jelly beans in a jar. He asks his friends how many
+they think are in the jar. One says 80. Another says 20 more than half the first one. A third
+says 25% more than the first one. What is their average guess? If the first friend’s guess is
+more than 77 jelly beans (# Aline with the condition) ,the average guess will be more than 86
+(# Contrary to the expected answer) .
+Prompt-Based Removing : We first adopt a prompt-based method to remove one condition from the
+original testing problems using a carefully designed template and GPT-4 [OpenAI, 2023] model. We
+obtain an initial M version of each dataset where each problem has one missing condition, thereby
+becoming an ill-defined math problem. Based on the initial M version, we implement an LLM-human
+collaborative refinement strategy to further refine the constructed datasets: (1) We adopt the zero-shot
+baseline method with a carefully designed prompt and the majority voting strategy, to verify each
+construction. Through this approach, any problems that fail to meet the desired standards are filtered
+out. (2) Filtered problems are manually inspected and subsequently revised to ensure the correctness
+of mutation.
+Template-Based Removing : We adopt a straightforward template-based method to select one
+[number] in problem statement and replace it with some . Then, the LLM-human collaborative
+refinement strategy is adopted to ensure the quality of constructed datasets.
+Template-Based Addition : We design a template-based method to add contradictory hints to the end
+of each problem. The template is if [variable] [more/less] than [number] , the answer
+will be [more/less] [number] , where [variable] is a variable selected in the problem state-
+ment and [number] and[more/less] are automatically decided, ensuring problems unsolved.
+We applied the three methods to the four seed datasets (details can be found in Appendix A) and
+verified that there was not a satisfiable and unique solution solution to each mutated problem. Finally,
+ourPMC benchmark contains eight different datasets, i.e., GSM8k-M, GSM8k-C, SV AMP-M,
+SV AMP-C, AddSub-M, AddSub-C, MultiArith-M, and MultiArith-C, which can comprehensively
+evaluate the robustness of LLMs in mathematical reasoning problems with missing and contradictory
+conditions. An illustration of mutated M and C versions of PMC is presented in Example 2, where
+red strike-through indicates deleted sentences and blue indicates added sentences.
+2.2 Evaluation Protocol
+To assess the robustness of few-shot prompting methods in mathematical reasoning problems involv-
+ing missing and contradictory conditions, we propose two distinct evaluation metrics: the Rejection
+3Rate (R-Rate) and the Reaction Score (R-Score). These metrics serve to evaluate the ability of
+the few-shot prompting methods to handle ill-defined problems and effectively respond when both
+ill-defined and well-defined problems are given.
+We denote Pas the textual problem space, where p∼ P is a problem and S(p)is the corresponding
+solution. M(p)denotes the solution generated using the few-shot prompting method Mon problem
+p, where M(p)∈ R indicates that the method rejects to answer this problem and Rdenotes the
+rejection domain. Then, for an ill-defined problem set Pill∈ P and a well-defined problem set
+Pwell∈ P, we define the R-Rate and R-Score as follows.
+Rejection Rate measures the ability of the few-shot prompting methods to identify ill-defined
+problems. We denote the R-Rate as the ratio of ill-problems rejected by each method to the total
+number of ill-problems:
+R-Rate =P
+p∈PillI[M(p)∈ R]
+|Pill|(1)
+Reaction Score comprehensively measures the ability of the few-shot prompting methods to handle
+ill-defined problems as well as solve well-defined problems. For well-defined problems, the method
+will gain one point for each correct answer and lose one point for each wrong answer. Rejecting to
+answer well-defined problems will not affect the R-Score as the rejection will not result in the user
+getting the wrong answer. For ill-defined problems, the method will gain one point for each correct
+rejection. The R-Score is defined as:
+R-Score =X
+p∈PwellI[S(p) =M(p)]−I[S(p)̸=M(p)∧M(p)/∈ R]
++X
+p∈PillI[M(p)∈ R](2)
+For computing R-Score, this metric is closely related to the ratio of normal-defined to pathological-
+defined questions in the test dataset. We use a hyperparameter α=|Pwell|/|Pill|, to control the
+proportion of the test dataset consisting of the two types of samples. Unless otherwise specified later,
+we set αto 1.
+3 Methodology
+Existing few-shot prompting methods typically assume a priori that the problem is solvable, thus
+selectively model the conditions that are favorable for the problem to be solved and construct some
+illusory assumptions for the missing information. This leads to the identification of ill-defined
+problems entirely relying on the capabilities of the backbone model itself, leaving the algorithm with
+a trade-off dilemma of reasoning for well-defined problems and recognizing ill-defined problems.
+In this section, we will introduce our SLPapproach to preliminarily address the challenges in our
+PMC benchmark, which contains two parts: SMT-LIB Prompting and a double-check solving strategy.
+The former will use the SMT-LIB language to model the problem robustly by defining variables and
+adding constraints for each condition. The latter will check if the problem has a satisfiable and unique
+solution and give corresponding feedback(answer/reject) to the user. An overall illustration of our
+SLPapproach is shown in Figure 1.
+3.1 SMT-LIB Prompting
+The SMT-LIB(Satisfiability Modulo Theories Library) [Barrett et al., 2010] is a tool for working with
+satisfiability problems. It provides a standard notation compatible input language for representing
+logical formulas. And powful SMT solvers, such as Z3 [de Moura and Bjørner, 2008], extend the
+classical boolean satisfiability problem (SAT problem) to enable verification of numerical arithmetic
+problems, among others. The SMT solver will initially determine whether the modeled problem is
+satisfiable (SAT/UNSAT). If it is satisfiable, the solver will then provide a feasible solution within the
+feasible domain of the problem.
+Inspired by this, we propose our SMT-LIBprompting approach, referred to as SLP, for addressing
+the solving and recognition dilemma in our PMC benchmark. To the best of our knowledge, we are
+4Question :
+A new program  had some  
+downloads  in the first month .
+Thenumber ofdownloads in
+thesecond month was three
+times as many as the
+downloads inthefirstmonth ,
+butthen reduced some inthe
+third month .How many
+downloads didtheprogram
+have total over the three
+months ?· · · · · ·
+Solver.add (second =first*3)
+Solver.add (third =second -reduced)
+Solver.add (total =first + second +third )
+return  total, solver
+Modeling problem
+UserPrompts based on SMT -LibFeedback
+Double -Check Solving Strategy
+· · · · · ·
+Solver.add (second =first*3)
+Solver.add (third =second -reduced)
+Solver.add (total =first + second +third )
+return  total, solver
+S.check ()
+Satisfiability
+S.solve () Candidate Solution
+UniquenessRejectUNSAT
+Answer
+Modeling of problem by LLM 
+147
+Add new constraintDouble -
+Check 
+Solving 
+Strategy
+SMT Solver
+same
+Figure 1: An illustration of our S LPapproach.
+the first to apply a similar tool in the field of robust math reasoning. We utilize LLMs to generate
+SMT-LIB expressions for each problem with few-shot prompting techniques to model the question.
+These expressions are then evaluated by the SMT solver to verify their satisfiability.
+To elaborate on our SLPapproach, let frepresent the formalized SMT-LIB expression for a given
+problem p. We prepare a set of example problems Pexample ={p1, p2, . . . , p k}along with their
+corresponding SMT-LIB expressions Fexample ={f1, f2, . . . , f k}. The prompts, which include
+in-context examples, are designed as
+prompt ≡< p 1, f1>∥< p 2, f2>∥. . .∥< p k, fk>∥ptest
+where∥denotes string concatenation and <·,·>represents a pair of a problem and its corresponding
+formal expression. For each problem ptest, we feed the prompt to the LLMs and obtain the
+formalized SMT-LIB expression ftestfrom the LLMs’ response.
+The formal expression begins with denoting the variables necessary to solve the problem, followed
+by adding constraints to these variables. Finally, we return the variable to the SMT solver for further
+verification. In our approach, we directly use Z3 as the SMT solver and instruct the LLMs to generate
+Z3 formal expressions to avoid potential errors caused by converting between the standard SMT-LIB
+language and the Z3 solver. Full prompts can be found in Appendix D.
+3.2 Double-Check Solving Strategy
+After modeling the problem, we apply a double-check solving strategy to solve these problem. We
+use a SMT solver to verify whether this problem is well-defined. Specifically, we verify both the
+satisfiability of the formal expression and the uniqueness of the solution . Then If the formal expression
+is either unsatisfiable or encompasses multiple solutions, the SLPapproach identifies the problem as
+ill-defined and rejects to answer the problem. If it passes this double-check process, we return the
+verified answer to the user.
+To be specific, to check the satisfiability of the formal expression, we utilize the Z3 solver. SLP
+approach regards the problem as ill-defined and rejects the answer if the formal expression is
+unsatisfiable(UNSAT). To assess the uniqueness of the solution, We develop this check through
+a two-stage process. First, we utilize the Z3 solver to determine one solution and subsequently
+incorporate this candidate solution as a constraint into the formal expression. If the formal expression
+remains satisfiable, then it implies that the formal expression encompasses multiple solutions, leading
+the S LPalgorithm to reject the answer as it violates the uniqueness of the answer.
+Following the verification of both satisfiability and uniqueness, the SLPalgorithm delivers the final
+answer in the form of a satisfiable and unique solution. A detailed implementation of the SLP
+algorithm is presented in Algorithm 1 in Appendix B.
+5Table 1: The comparison between SLPand comparison methods with GPT-3.5 Turbo (0710 version).
+MethodsAddSub AddSub-M AddSub-C MultiArith MultiArith-M MultiArith-C
+Accuracy R-Rate R-Score R-Rate R-Score Accuracy R-Rate R-Score R-Rate R-Score
+Basic 94.43 63.54 26.64 2.02 -4.55 88.46 63.33 20.65 2.00 -9.96
+CoT 91.63 63.03 27.91 15.70 1.51 98.00 56.17 25.83 10.50 3.00
+PAL 89.87 2.28 -8.98 0.25 -10.00 98.17 2.33 -0.41 1.67 -1.42
+PHP 91.39 74.68 29.87 0.76 -7.08 98.50 57.17 27.25 0.16 -1.25
+Ours 88.86 90.89 37.39 85.06 31.89 86.50 81.50 33.50 85.00 35.25
+MethodsSV AMP SV AMP-M SV AMP-C GSM8k GSM8k-M GSM8k-C
+Accuracy R-Rate R-Score R-Rate R-Score Accuracy R-Rate R-Score R-Rate R-Score
+Basic 75.37 72.41 15.62 13.14 -14.16 69.45 56.37 -2.61 8.50 -26.57
+CoT 81.58 51.10 9.83 9.40 -11.06 71.72 51.25 -1.08 30.10 -12.39
+PAL 82.80 6.30 -13.70 1.00 -16.80 76.55 5.15 -18.95 0.38 -21.34
+PHP 80.80 66.30 15.85 1.90 -16.35 78.71 53.85 8.57 2.04 -17.32
+Ours 81.80 81.00 25.80 85.00 27.80 69.22 68.39 10.42 78.09 15.27
+*The results are conducted using GPT-3.5 Turbo (0710 version). The best results are in bold.
+4 Experiments
+In this section, we first present the experimental results for analyzing the performance of existing
+methods and demonstrating the superiority of our SLPapproach. Then, a series of discussions are
+conducted to investigate the challenges of our PMC benchmark.
+4.1 Experiment Setup
+Datasets and LLMs. As introduced in Section 2, we conduct experiments on our PMC benchmark,
+which contains eight different constructed datasets, i.e., GSM8k-M, GSM8k-C, SV AMP-M, SV AMP-
+C, AddSub-M, AddSub-C, MultiArith-M, and MultiArith-C, as well as their original versions. For all
+experiments, we choose the 0710 version of GPT-3.5 Turbo and GPT-4 as the backend LLMs, which
+are the most advanced and widely used LLMs at present.
+Evaluated methods. We choose five well-performed few-shot prompting methods for evaluation,
+including one zero-shot baseline method, two language-based few-shot prompting methods, one
+program-based few-shot prompting method, and our proposed SLPapproach. The methods are
+introduced as follows:
+•Basic, which is the zero-shot baseline method, directly feeds the problem and instructions to
+the LLMs without any example problem in the context.
+•CoT [Wei et al., 2022], requires the model to explicitly output intermediate step-by-step
+reasoning through natural language before providing the final answer.
+•PAL [Gao et al., 2023], converts each step of problem-solving into a programming language
+format and subsequently utilizes an external programming language interpreter for execution,
+thereby obtaining the results.
+•PHP [Zheng et al., 2023], involves asking a question multiple times and using the answer
+obtained from the last inquiry as a hint for the next inquiry until the same answer is obtained
+multiple times in a row.
+•SLP(ours), utilizes SMT-LIB to model the problems, then uses an external SMT solver to
+check for a feasible solution to the problem as well as obtain the ground-truth answer.
+Prompts Setting. We prepare eight contexts containing corresponding problem-solving forms for
+each method. For the context of the comparison method, we followed the settings in their original
+paper. Meanwhile, for our method, we choose a combination of four normal problems, two missing
+condition problems, two contradictory problems, and their corresponding SMT modeling statements
+(Python Z3 format). Detailed prompts can be found in Appendix D.
+6Table 2: The comparison between S LPand comparison methods with GPT-4 (0710 version).
+MethodsAddSub AddSub-M AddSub-C MultiArith MultiArith-M MultiArith-C
+Accuracy R-Rate R-Score R-Rate R-Score Accuracy R-Rate R-Score R-Rate R-Score
+Basic 94.57 90.61 41.06 1.30 -3.02 92.17 89.67 37.17 4.16 -5.58
+CoT 96.45 84.77 39.31 2.03 -2.41 99.00 81.00 39.50 3.33 2.33
+PAL 95.95 75.19 33.67 0.51 -3.67 98.00 65.83 31.33 3.00 -0.08
+PHP 95.95 92.40 42.65 2.53 -2.27 96.33 96.34 45.41 3.83 -0.83
+Ours 91.90 94.43 41.64 81.52 35.18 95.33 93.50 43.92 85.00 39.67
+MethodsSV AMP SV AMP-M SV AMP-C GSM8k GSM8k-M GSM8k-C
+Accuracy R-Rate R-Score R-Rate R-Score Accuracy R-Rate R-Score R-Rate R-Score
+Basic 82.35 79.82 25.40 10.38 -9.24 57.69 75.25 -3.62 14.43 -33.83
+CoT 92.14 74.30 30.72 5.30 -4.02 92.61 62.63 25.73 8.46 -1.69
+PAL 95.50 61.10 26.35 0.50 -3.95 83.09 41.13 9.71 0.53 -10.72
+PHP 89.40 81.60 33.45 7.30 -3.70 94.38 78.01 33.89 3.41 -3.41
+Ours 94.80 83.20 37.45 86.00 38.85 88.17 81.12 32.18 80.52 31.88
+*The results are conducted using GPT-4 (0710 version). The best results are in bold.
+4.2 Main Results
+The main results of our study are presented in Tables 1 and 2, with all methods using greedy decoding
+(i.e. temperature = 0). We report five metrics for each dataset. They are the accuracy ( ×100) of the
+original dataset, rejection rate (R-Rate) ( ×100) of ill-defined questions and reaction score (R-Score)
+for the mixed dataset. We conduct the following observations based on the presented results.
+The few-shot prompting methods hinder the rejection of problems with missing conditions. For
+problems with missing conditions, the zero-shot baseline method (i.e., Basic) already exhibits good
+identification capabilities. As the performance of the backend LLMs improves (from GPT-3.5 Turbo
+to GPT-4), this capability is further enhanced. However, current few-shot techniques hurt LLMs’
+ability to identify ill-defined problems. Particularly for the PAL method, the rejection rate of problems
+with missing conditions using GPT-3.5 significantly degrades compared to the zero-shot baseline
+method. When using GPT-4, the rejection rate of PAL also decreases by at least 15% compared to the
+zero-shot baseline method. Upon examining error examples, we discovered the reason that, during
+the process of writing the programming language, PAL defaults the missing value to zero or another
+random number, leading to incorrect results.
+The few-shot prompting methods cannot handle problems with contradictory conditions. All
+comparison methods exhibit poor performance in identifying problems with contradictory conditions,
+where they can only identify no more than 15.7% of ill-defined problems with contradictory condi-
+tions. Upon analyzing error samples, it was observed that many methods choose to disregard the
+contradictory conditions and instead, focus on directly modeling the preceding problem part. When
+facing two contradictory conditions, both zero-shot baseline and few-shot prompting methods fail to
+recognize the conflicts, resulting in choosing randomly to believe in one condition while ignoring the
+other. Such responses pose significant security risks in practical scenarios, as users do not receive
+feedback indicating that the query is ill-defined.
+SLPimproves the LLMs’ ability to handle both well-defined and ill-defined problems simulta-
+neously. As shown in Tables 1 and 2, our SLPapproach enhances the LLMs’ ability to address both
+well-defined and ill-defined problems simultaneously. For the ill-defined problem, involving either
+missing conditions or contradictory conditions, SLPachieved a recognition rate of over 80% in nearly
+all datasets. Particularly for contradictory conditions, SLPdemonstrates a significant performance ad-
+vantage over other comparative methods. In the case of Reaction Score, SLPconsistently outperforms
+other methods across major datasets, demonstrating its robustness in handling real-world complexities
+and diverse scenarios. PHP surpasses SLPin one dataset, but it requires multiple inference processes,
+incurring substantial additional resources and time consumption. In contrast, our method only needs
+to call the LLM once to achieve performance that is nearly on par with PHP.
+7/uni00000026/uni00000052/uni00000037 /uni00000026/uni00000052/uni00000037/uni00000010/uni00000015 /uni00000026/uni00000052/uni00000037/uni00000010/uni00000017 /uni00000026/uni00000052/uni00000037/uni00000010/uni00000019 /uni00000026/uni00000052/uni00000037/uni00000010/uni0000001b/uni00000013/uni00000015/uni00000013/uni00000017/uni00000013/uni00000019/uni00000013/uni0000001b/uni00000013/uni00000014/uni00000013/uni00000013/uni00000033/uni00000048/uni00000055/uni00000049/uni00000052/uni00000055/uni00000050/uni00000044/uni00000051/uni00000046/uni00000048/uni00000003/uni0000000b/uni00000008/uni0000000c/uni00000026/uni00000052/uni00000037
+/uni00000033/uni00000024/uni0000002f /uni00000033/uni00000024/uni0000002f/uni00000010/uni00000015 /uni00000033/uni00000024/uni0000002f/uni00000010/uni00000017 /uni00000033/uni00000024/uni0000002f/uni00000010/uni00000019 /uni00000033/uni00000024/uni0000002f/uni00000010/uni0000001b/uni00000033/uni00000024/uni0000002f
+/uni00000024/uni00000046/uni00000046/uni00000058/uni00000055/uni00000044/uni00000046/uni0000005c
+/uni00000035/uni00000010/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000030/uni0000000c
+/uni00000035/uni00000010/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000026/uni0000000c
+/uni00000024/uni00000046/uni00000046/uni00000058/uni00000055/uni00000044/uni00000046/uni0000005c /uni00000035/uni00000010/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000030/uni0000000c /uni00000035/uni00000010/uni00000035/uni00000044/uni00000057/uni00000048/uni00000003/uni0000000b/uni00000026/uni0000000cFigure 2: The performance comparison of CoT, PAL and their variants. The results indicate that
+simply adjusting the few-shot examples in the context presents a trade-off between effectively
+addressing both well-defined and ill-defined problems.
+4.3 More Discussion
+In this part, we present a series of discussions to investigate the challenges of our PMC benchmark
+and the SLPapproach. Due to page limitations, most of the results and analyses are detailed in the
+Appendix C. We primarily highlight the trade-off dilemma of existing methods and explain why our
+approach can effectively resolve ill-defined problems through case analysis.
+4.3.1 Trade-off dilemma
+Contextual prompts play a crucial role in LLM reasoning. All the algorithms we compared employ
+8 in-context examples to guide the LLMs in generating reasoning paths or programs. A natural
+conjecture is that the reason for the limited success of existing few-shot methods on the M and C
+versions lies in the insufficiency of the provided few-shot examples to enable the LLMs to recognize
+problems with missing and contradictory conditions. To validate this hypothesis, we introduce two
+sets of comparison methods on CoT and PAL, denoted as CoT- Xand PAL- X, which replace X
+well-defined examples with Xill-defined examples in the context, aiming to instruct the LLMs to
+recognize the ill-defined problems. The corresponding results are presented in Figure 2.
+We observed that, in the CoT method, the accuracy of original problems tends to decrease as the
+number of ill-defined examples increases from 0 to 8. Concurrently, the rejecting rate of ill-defined
+problems increases. These findings suggest that the performance of LLMs in mathematical reasoning
+tasks and rejecting tasks is significantly impacted by few-shot prompting. Furthermore, there exists
+a trade-off between the performance of these two tasks. This phenomenon gives rise to a dilemma
+in our PMC benchmark, where altering the few-shot examples fails to address the issue of LLMs
+rejecting ill-defined problems fundamentally. Instead, it only allows for a compromise between
+reasoning and rejecting.
+In the case of the PAL method, we observed that the accuracy and rejecting rate remain stable as the
+number of ill-defined examples increases from 0 to 6 until all examples are replaced with ill-defined
+problems. The stability in accuracy is attributed to the PAL method’s reliance on external tools for
+completing mathematical reasoning tasks. However, the consistently low rejecting rate of ill-defined
+problems suggests that sequentially executed programs are not suitable for effectively identifying
+and rejecting ill-defined problems. In contrast to the previous two methods, our algorithm naturally
+avoids such issues. We model each condition and ascertain whether a satisfiable and unique solution
+can be obtained with the assistance of the SMT solver.
+4.3.2 Case analysis
+In this section, we present concrete case studies to show why our approach can solve ill-defined
+problems. As shown in Figure 3, we take two specific M-type and C-type problems as examples. For
+Problem 1, crucial information regarding the students attending the jazz class is missing. Traditional
+8In a dance  class  of 20 students,  20% enrolled  in 
+contemporary  dance,  and the rest enrolled  in 
+jazz or hip-hop dance . What  percentage  of the 
+entire  students  enrolled  in hip-hop dance?
+# lack the information  of jazz student
+A robe  takes  2 bolts  of blue  fiber  and half that much  
+white  fiber . How  many  bolts  in total  does  it take?  If 
+the number  of bolts  of blue  fiber  is less than  6, the 
+answer  will be more  than  5.    #Contradictory  hintjazz_students  = Int(' jazz_students ’)    
+solver.add (hip_hop_students  + jazz_students  == \
+total _students  - contemporary_students )  
+solver.add (hip_hop_percentage  == hip_hop_students  * 100/ total_students )
+return hip_hop_percentage , solver
+solver.add (white_fiber  == blue_fiber  / 2)      
+solver.add (total_bolts  == blue_fiber  + white_fiber )   
+solver.add (Implies( blue_fiber  < 6, total_bolts  > 5))
+return total_bolts , solverIll-defined problem 2: （C-type）Ill-defined problem 1: （M-type） Core step by Slp
+Core step by Slp
+Figure 3: Example of how SLP method models ill-defined problem.
+methods typically default this missing value to 0, resulting in an incorrect answer. In contrast, our
+method only imposes a “int” constraint (highlighted in red) on this missing variable. This way, the
+question will be rejected as ill-defined during the uniqueness test because it returns two different
+solutions.
+For Problem 2, most comparison methods ignore our contradiction hints and model only the preceding
+conditions. Some methods disregard the preceding valid conditions and model only the ill-defined
+hints. Both approaches yield incorrect answers by selectively modeling parts of the information.
+In contrast, our approach models all the conditions and then refuses to answer the question by
+identifying it as paradoxically defined through a satisfiability check. Detailed answers to the individual
+comparison methods for these two problems can be found in the Appendix C.
+5 Related work
+Our paper is related to three branches of studies, that is, few-shot prompting methods, mathematical
+reasoning for LLMs and natural language benchmarks for LLM robustness.
+Few-shot prompting methods. Few-shot technique has gained a lot of momentum due to its time
+and power-saving properties. CoT-type methods [Wei et al., 2022, Zhang et al., 2022, Zhou et al.,
+2022, Zheng et al., 2023] strengthen model inference by displaying the intermediate inference process
+of the model, improve performance on multiple review benchmarks, and perform very well in the
+zero-shot setting [Kojima et al., 2022]. Program-type methods [Chen et al., 2022, Gao et al., 2023,
+Chowdhery et al., 2023]transform natural language into an easily processable programming language,
+which is then executed by an external program interpreter. More external engines have also been
+explored, such as Calculators, search engines, translators [Schick et al., 2023, Lu et al., 2023a].
+Ensemble-optimized [Wang et al., 2022, Li et al., 2022] approach further improve performance by
+integrating and calibrating multiple inference paths and fusing existing methods.
+Mathematical Reasoning for LLMs. Mathematical reasoning is a crucial aspect in evaluating model
+reasoning skills, and there are currently two predominant lines for enhancing these skills. One line
+involves leveraging the existing few-shot prompt tool, as detailed in the preceding section. The other
+is centered around fine-tuning strategy. Metamath [Yu et al., 2023] bootstraps mathematical questions
+by rewriting the question from multiple perspectives, and finetune the LLaMA-2 [Touvron et al.,
+2023] models on this dataset. WizardMath [Luo et al., 2023] combine supervised fine-tuning and
+PPO [Schulman et al., 2017] training to enhance math reasoning abilities by a reinforced evol-instruct
+method. Mugglemath [Li et al., 2023] explores in detail the relationship between enhanced data
+strategies and improved model inference after fine-tuning. Mathvista [Lu et al., 2023b] focuses
+on the multimodal domain, combines challenges from diverse mathematical and visual tasks, and
+systematically investigates LLM’s ability to reason mathematically in visual contexts.
+Natural language benchmarks for LLM robustness. Previous work can be broadly categorized
+into two types, perturbations to model inputs and prompting with noisy ground truth. Adversarial
+example generation [Jia and Liang, 2017, Morris et al., 2020, Wang et al., 2021] and irrelevant
+context [Sinha et al., 2019, Clark et al., 2020, Han et al., 2022] are the two main types of perturbations
+to the input. [Shi et al., 2023] have found that adding a single irrelevant sentence into the problem
+description significantly degrades the performance. A line of work [Weston et al., 2015, Yoo et al.,
+2022, Madaan and Yazdanbakhsh, 2022] studies the model performance with incorrect prompting
+exemplars, i.e., the example problems are paired with wrong answers. One intriguing observation is
+9that the alignment between the label and the question does not always serve as a conclusive factor in
+determining performance.
+6 Conclusion
+In this paper, we study the mathematical reasoning problems with missing and contradictory con-
+ditions and propose a novel PMC benchmark to evaluate the robustness of LLMs and few-shot
+prompting methods. Our observations reveal a dilemma between the performance of mathematical
+reasoning for well-defined problems and the ability to recognize and reject ill-defined problems. To
+solve this trade-off, we propose a novel few-shot prompting method called SLP, which utilizes the
+SMT-LIB language to model the problems instead of solving them directly. Then, a double-check
+strategy is applied to verify the problem and thereby provide the final feedback. Extensive experi-
+ments demonstrate the superiority of our SLPapproach compared to existing few-shot prompting
+methods. We hope our benchmark and proposed SLPapproach can facilitate future research about
+the robustness of mathematical reasoning tasks and few-shot prompting methods.
+References
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric Tang, Dawn Song, and
+Jacob Steinhardt. Measuring mathematical problem solving with the math dataset. In Advances in Neural
+Information Processing Systems Track on Datasets and Benchmarks , 2021.
+Aitor Lewkowycz, Anders Andreassen, David Dohan, Ethan Dyer, Henryk Michalewski, Vinay Ramasesh,
+Ambrose Slone, Cem Anil, Imanol Schlag, Theo Gutman-Solo, et al. Solving quantitative reasoning problems
+with language models. Advances in Neural Information Processing Systems , pages 3843–3857, 2022.
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, brian ichter, Fei Xia, Ed Chi, Quoc V Le, and
+Denny Zhou. Chain-of-thought prompting elicits reasoning in large language models. In Advances in Neural
+Information Processing Systems , pages 24824–24837, 2022.
+Luyu Gao, Aman Madaan, Shuyan Zhou, Uri Alon, Pengfei Liu, Yiming Yang, Jamie Callan, and Graham
+Neubig. Pal: Program-aided language models. In Proceedings of the 40th International Conference on
+Machine Learning , pages 10764–10799, 2023.
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz Kaiser, Matthias Plappert,
+Jerry Tworek, Jacob Hilton, Reiichiro Nakano, et al. Training verifiers to solve math word problems. arXiv
+preprint arXiv:2110.14168 , 2021.
+Mohammad Javad Hosseini, Hannaneh Hajishirzi, Oren Etzioni, and Nate Kushman. Learning to solve arithmetic
+word problems with verb categorization. In Proceedings of the 2014 Conference on Empirical Methods in
+Natural Language Processing , pages 523–533, 2014.
+Rik Koncel-Kedziorski, Subhro Roy, Aida Amini, Nate Kushman, and Hannaneh Hajishirzi. Mawps: A math
+word problem repository. In Proceedings of the 2016 conference of the north american chapter of the
+association for computational linguistics , pages 1152–1157, 2016.
+Arkil Patel, Satwik Bhattamishra, and Navin Goyal. Are nlp models really able to solve simple math word
+problems? arXiv preprint arXiv:2103.07191 , 2021.
+Ewa Puchalska and Zbigniew Semadeni. Children’s reactions to verbal arithmetical problems with missing,
+surplus or contradictory data. For the learning of mathematics , 7(3):9–16, 1987.
+John Armour and Mari Sako. Ai-enabled business models in legal services: from traditional law firms to
+next-generation law companies? Journal of Professions and Organization , 7(1):27–46, 2020.
+KS Pavlova and NV Knyazeva. Artificial intelligence technologies in tax consulting and forensic tax expertise.
+Digital Technologies in the New Socio-Economic Reality , pages 291–300, 2022.
+Taylor Roberts. Utilizing generative artificial intelligence for tax and legal consultancy: Design science approach.
+2024.
+Arfah Habib Saragih, Qaumy Reyhani, Milla Sepliana Setyowati, and Adang Hendrawan. The potential of an
+artificial intelligence (ai) application for the tax administration system’s modernization: the case of indonesia.
+Artificial Intelligence and Law , 31(3):491–514, 2023.
+10Rhonda Brown, Stewart Dunn, Karen Byrnes, Richard Morris, Paul Heinrich, and Joanne Shaw. Doctors’ stress
+responses and poor communication performance in simulated bad-news consultations. Academic Medicine ,
+84(11):1595–1602, 2009.
+Susan C Weller, Roberta D Baer, Javier Garcia de Alba Garcia, and Ana L Salcedo Rocha. Susto and nervios:
+Expressions for stress and depression. Culture, Medicine, and Psychiatry , 32:406–420, 2008.
+Clark Barrett, Aaron Stump, Cesare Tinelli, et al. The smt-lib standard: Version 2.0. In Proceedings of the 8th
+international workshop on satisfiability modulo theories , volume 13, page 14, 2010.
+OpenAI. Gpt-4. Technical report, 2023.
+Leonardo Mendonça de Moura and Nikolaj S. Bjørner. Z3: an efficient SMT solver. In C. R. Ramakrishnan
+and Jakob Rehof, editors, Procddings of the 14th Tools and Algorithms for the Construction and Analysis of
+Systems International Conference , volume 4963 of Lecture Notes in Computer Science , pages 337–340, 2008.
+Chuanyang Zheng, Zhengying Liu, Enze Xie, Zhenguo Li, and Yu Li. Progressive-hint prompting improves
+reasoning in large language models. arXiv preprint arXiv:2304.09797 , 2023.
+Zhuosheng Zhang, Aston Zhang, Mu Li, and Alex Smola. Automatic chain of thought prompting in large
+language models. arXiv preprint arXiv:2210.03493 , 2022.
+Denny Zhou, Nathanael Schärli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Claire
+Cui, Olivier Bousquet, Quoc Le, et al. Least-to-most prompting enables complex reasoning in large language
+models. arXiv preprint arXiv:2205.10625 , 2022.
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. Large language
+models are zero-shot reasoners. In Advances in neural information processing systems , pages 22199–22213,
+2022.
+Wenhu Chen, Xueguang Ma, Xinyi Wang, and William W Cohen. Program of thoughts prompting: Disentangling
+computation from reasoning for numerical reasoning tasks. arXiv preprint arXiv:2211.12588 , 2022.
+Aakanksha Chowdhery, Sharan Narang, Jacob Devlin, Maarten Bosma, Gaurav Mishra, Adam Roberts, Paul
+Barham, Hyung Won Chung, Charles Sutton, Sebastian Gehrmann, et al. Palm: Scaling language modeling
+with pathways. Journal of Machine Learning Research , 24(240):1–113, 2023.
+Timo Schick, Jane Dwivedi-Yu, Roberto Dessì, Roberta Raileanu, Maria Lomeli, Luke Zettlemoyer, Nicola
+Cancedda, and Thomas Scialom. Toolformer: Language models can teach themselves to use tools. arXiv
+preprint arXiv:2302.04761 , 2023.
+Pan Lu, Baolin Peng, Hao Cheng, Michel Galley, Kai-Wei Chang, Ying Nian Wu, Song-Chun Zhu, and Jianfeng
+Gao. Chameleon: Plug-and-play compositional reasoning with large language models. arXiv preprint
+arXiv:2304.09842 , 2023a.
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, and
+Denny Zhou. Self-consistency improves chain of thought reasoning in language models. arXiv preprint
+arXiv:2203.11171 , 2022.
+Yifei Li, Zeqi Lin, Shizhuo Zhang, Qiang Fu, Bei Chen, Jian-Guang Lou, and Weizhu Chen. On the advance of
+making language models better reasoners. arXiv preprint arXiv:2206.02336 , 2022.
+Longhui Yu, Weisen Jiang, Han Shi, Jincheng Yu, Zhengying Liu, Yu Zhang, James T Kwok, Zhenguo Li,
+Adrian Weller, and Weiyang Liu. Metamath: Bootstrap your own mathematical questions for large language
+models. arXiv preprint arXiv:2309.12284 , 2023.
+Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov,
+Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, et al. Llama 2: Open foundation and fine-tuned chat
+models. arXiv preprint arXiv:2307.09288 , 2023.
+Haipeng Luo, Qingfeng Sun, Can Xu, Pu Zhao, Jianguang Lou, Chongyang Tao, Xiubo Geng, Qingwei Lin,
+Shifeng Chen, and Dongmei Zhang. Wizardmath: Empowering mathematical reasoning for large language
+models via reinforced evol-instruct. arXiv preprint arXiv:2308.09583 , 2023.
+John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. Proximal policy optimization
+algorithms. arXiv preprint arXiv:1707.06347 , 2017.
+Chengpeng Li, Zheng Yuan, Guanting Dong, Keming Lu, Jiancan Wu, Chuanqi Tan, Xiang Wang, and Chang
+Zhou. Query and response augmentation cannot help out-of-domain math reasoning generalization. arXiv
+preprint arXiv:2310.05506 , 2023.
+11Pan Lu, Hritik Bansal, Tony Xia, Jiacheng Liu, Chunyuan Li, Hannaneh Hajishirzi, Hao Cheng, Kai-Wei Chang,
+Michel Galley, and Jianfeng Gao. Mathvista: Evaluating mathematical reasoning of foundation models in
+visual contexts. arXiv preprint arXiv:2310.02255 , 2023b.
+Robin Jia and Percy Liang. Adversarial examples for evaluating reading comprehension systems. arXiv preprint
+arXiv:1707.07328 , 2017.
+John X Morris, Eli Lifland, Jin Yong Yoo, Jake Grigsby, Di Jin, and Yanjun Qi. Textattack: A framework for
+adversarial attacks, data augmentation, and adversarial training in nlp. arXiv preprint arXiv:2005.05909 ,
+2020.
+Boxin Wang, Chejian Xu, Shuohang Wang, Zhe Gan, Yu Cheng, Jianfeng Gao, Ahmed Hassan Awadallah,
+and Bo Li. Adversarial glue: A multi-task benchmark for robustness evaluation of language models. arXiv
+preprint arXiv:2111.02840 , 2021.
+Koustuv Sinha, Shagun Sodhani, Jin Dong, Joelle Pineau, and William L Hamilton. Clutrr: A diagnostic
+benchmark for inductive reasoning from text. arXiv preprint arXiv:1908.06177 , 2019.
+Peter Clark, Oyvind Tafjord, and Kyle Richardson. Transformers as soft reasoners over language. arXiv preprint
+arXiv:2002.05867 , 2020.
+Simeng Han, Hailey Schoelkopf, Yilun Zhao, Zhenting Qi, Martin Riddell, Luke Benson, Lucy Sun, Ekaterina
+Zubova, Yujie Qiao, Matthew Burtell, et al. Folio: Natural language reasoning with first-order logic. arXiv
+preprint arXiv:2209.00840 , 2022.
+Freda Shi, Xinyun Chen, Kanishka Misra, Nathan Scales, David Dohan, Ed H Chi, Nathanael Schärli, and
+Denny Zhou. Large language models can be easily distracted by irrelevant context. In Proceedings of the
+40th International Conference on Machine Learning , pages 31210–31227, 2023.
+Jason Weston, Antoine Bordes, Sumit Chopra, Alexander M Rush, Bart Van Merriënboer, Armand Joulin, and
+Tomas Mikolov. Towards ai-complete question answering: A set of prerequisite toy tasks. arXiv preprint
+arXiv:1502.05698 , 2015.
+Kang Min Yoo, Junyeob Kim, Hyuhng Joon Kim, Hyunsoo Cho, Hwiyeol Jo, Sang-Woo Lee, Sang-goo Lee,
+and Taeuk Kim. Ground-truth labels matter: A deeper look into input-label demonstrations. arXiv preprint
+arXiv:2205.12685 , 2022.
+Aman Madaan and Amir Yazdanbakhsh. Text and patterns: For effective chain of thought, it takes two to tango.
+arXiv preprint arXiv:2209.07686 , 2022.
+12A Dataset Details
+We construct our impossible dataset on the basis of four basic mathematical datasets by adding
+irrelevant conditions, adding contradictory conditions, and reducing necessary conditions.
+A.1 Origin dataset detatils
+1.AddSub. [Hosseini et al., 2014] A dataset of addition and subtraction arithmetic word
+problems with 395 examples.
+2.MultiArith. [Koncel-Kedziorski et al., 2016] A dataset consists of math word problems
+requiring multiple reasoning steps and operations with 600 examples.
+3.SV AMP. [Patel et al., 2021] A benchmark consists of one unknown arithmetic word problem
+for up-to-4 grade level students by making simple changes to a set of problems from another
+existing dataset. It has 1000 examples.
+4.GSM8K. [Cobbe et al., 2021] This dataset consists of 8.5K high-quality grade school math
+problems created by human problem writers. It is divided into 7.5K training problems
+and 1K test problems. These problems take between 2 and 8 steps to solve, and solutions
+primarily involve performing a sequence of elementary calculations using basic arithmetic
+operations (+ - / *) to reach the final answer. We simply use its test problems in our
+work(1318 examples).
+A.2 PMC Construction
+For the C version of each dataset, we adopt our template-based addition method to add contradictory
+hints to the end of each problem. For the M version of SV AMP, AddSub, and MultiArith datasets, we
+apply our template-based removing method to each dataset. For the M version of GSM8k, we apply
+our prompt-based removing method to each problem because GSM8k is more complex and cannot be
+simply mutated using a template-based method.
+B Algorithm details
+B.1 Pseudo code
+Algorithm 1 Solver for S LPAppraoch
+Input: Query variable V, Z3 SMT solver S
+Output: The response of S LPapproach ans
+{Check the Satisfiability.}
+1:sat←S.check()
+2:ifsat= UNSAT then
+3: ans←Reject {No solution.}
+4: return ans
+5:end if
+{Check the Uniqueness.}
+6:model = S.model()
+7:ans←model [V]
+8:Add constraint V̸=ansto SMT solver S
+9:sat←S.check()
+10:ifsat= SAT then
+11: ans←Reject {Multiple solutions.}
+12: return ans
+13:end if
+{Solve the Problem.}
+14:return ans
+13Table 3: Comparison of “Unsolvable" prompts used by CoT or not with GPT-3.5. We report the
+accuracy ( ×100) for the original dataset and the rejection rate ( ×100) for both M and C versions.
+Base Dataset Additional Prompt Accuracy R-Rate (M) R-Rate (C)
+AddSub✗ 91.63 63.03 15.70
+✓ 89.36 90.89 25.56
+∆ ↑27.86 ↑9.86
+MultiArith✗ 98.00 56.17 10.50
+✓ 97.83 81.33 11.17
+∆ ↑25.16 ↑0.67
+SV AMP✗ 81.58 51.10 9.40
+✓ 74.90 84.20 33.40
+∆ ↑33.10 ↑24.00
+GSM8k✗ 71.72 51.25 30.10
+✓ 61.41 78.24 44.35
+∆ ↑26.99 ↑14.25
+C Experiment details
+C.1 Effect of Prompt.
+We conduct experiments to investigate whether modifying prompts can enhance the few-shot prompt-
+ing methods’ resilience when handling ill-defined problems. To this end, we add “ If you cannot get
+a definite answer, please write ‘Unsolvable’ ” to the prompt and evaluate the performance of the CoT
+method on our PMC benchmark. The result is shown in Table 3, demonstrating that although this
+modification effectively enhances the model’s capacity to identify ill-defined problems, it decreases
+performance for mathematical reasoning. This observation also corroborates our previous claim
+that there is a trade-off dilemma between the mathematical reasoning capability and the ability to
+recognize ill-defined problems. Our SLPapproach does not encounter this dilemma naturally, as it
+focuses solely on modeling the problems without the necessity to solve them. By employing an SMT
+solver, the solvability of the problem can be assessed, offering a definitive solution.
+C.2 Effect of Self-consistency.
+Existing studies [Wang et al., 2022] demonstrate that self-consistency is a crucial factor in enhancing
+the robustness of a model. Therefore, we investigate the impact of increasing the number of examples
+for majority voting on various metrics and visualize the results in Figure 4. Our observation indicates
+that self-consistency cannot effectively improve the robustness of the few-shot prompting methods
+and LLMs when dealing with challenges in our PMC benchmark. As the number of voting times
+increases, the performance of the few-shot prompting methods only improves slightly for problems
+with missing conditions and even decreases for problems with contradictory conditions.
+C.3 Prompting Methods Induce Preferences and Hallucination.
+Previous experiments have shown that the few-shot prompting methods can adversely affect the
+performance of LLMs when face problems with missing conditions or contradictory conditions.
+One possible explanation for this phenomenon is that these few-shot prompting methods induce
+preferences and hallucinations in the LLMs. To further support our hypothesis, we conduct an
+ablation analysis to investigate the LLMs and few-shot prompting methods. We construct two types
+of variant datasets, namely, MC-V1 and MC-V2 versions, based on AddSub, MultiArith, SV AMP,
+and GSM8k datasets, In these variant datasets, we introduced irrelevant conditions by appending
+them to the original problem statements (MC-V1) or by prepending them (MC-V2). The results
+are reported in Table 4, using the average accuracy as the performance metric. Although existing
+methods demonstrate good performance on the original dataset, they all experience varying degrees of
+decline in performance on the MC-V1 and MC-V2 versions. Among these methods, the Basic method
+exhibits the least impact and demonstrates robust performance compared to other existing methods.
+The PAL method achieves the highest average performance on the MC-V1 version of the datasets
+but performs worse on the MC-V2 version. Our analysis of error samples indicates that the PAL
+140 5 10 20 50
+V oting Times020406080100Performance (%)
+Accuracy (M) R-Rate (C) R-RateFigure 4: Results: change in performance as the number of votes increases on PMC with CoT. We
+report the average results for the four subdatasets.
+method tends to generate hypothetical problems based solely on the initial conditions while neglecting
+subsequent information. The CoT method follows a similar trend, although it performs worse than
+the PAL method. The PHP method performs the worst on both the MC-V1 and MC-V2 variants, even
+though it performs exceptionally well on the original dataset. This suggests that repeatedly querying
+the LLMs with hints actually exacerbates the harm caused by irrelevant conditions. It is worth noting
+that our findings are consistent with previous work [Shi et al., 2023], further highlighting the fact that
+different few-shot prompting methods induce various preferences and hallucinations in LLMs.
+Table 4: Detailed experimental results on GPT-3.5 with two multi-condition dataset. We report the
+average results for the four subdatasets. The best performance is in bold.
+Methods Origin MC-V1 MC-V2
+Basic 81.20% 61.42% 70.15%
+CoT 87.23% 64.24% 33.46%
+PAL 86.87% 71.78% 60.46%
+PHP 87.34% 41.54% 53.45%
+C.4 Case analysis
+Questions in the case analysis and detailed responses to each of the comparative methods.
+15Example 3: Detailed responses for Question 1 in case analysis
+Question 1: In a dance class of 20 students, 20% enrolled in contemporary dance, and the
+rest enrolled in jazz or hip-hop dance. What percentage of the entire students enrolled in
+hip-hop dance? # lack the information of jazz student
+GPT-3.5 answer: 80%
+GPT-3.5 (CoT) answer: In a dance class of 20 students, 20% enrolled in contemporary
+dance. So, 20% of 20 is (20/100) * 20 = 4 students enrolled in contemporary dance. The rest
+of the students, which is 20 - 4 = 16 students, enrolled in jazz or hip-hop dance. Therefore,
+the percentage of students enrolled in hip-hop dance is (16/20) * 100 = 80%. The answer is
+80%.
+GPT-3.5 (PAL) answer:
+Def solution():
+total-students=20
+contemporary-students = int(total-students * 0.2)
+hip-hop-students=-studentscontemporary-students
+percentage-hip-hop = (hip-hop-students / total-students) * 100
+result = percentage-hip-hop
+return result
+GPT-3.5 (SLp) answer:
+def solution():
+solver = Solver()
+total_students = Int(’total_students’)
+contemporary_students = Int(’contemporary_students’)
+hip_hop_students = Int(’hip_hop_students’)
+jazz_students = Int(’jazz_students’)
+hip_hop_percentage = Real(’hip_hop_percentage’)
+solver.add(total_students == 20)
+solver.add(contemporary_students == total_students * 20 / 100)
+solver.add(hip_hop_students + jazz_students == total_students - contemporary_students)
+solver.add(hip_hop_percentage == hip_hop_students * 100 / total_students)
+return hip_hop_percentage, solver
+D Full prompts in experiments
+D.1 Prompts of S LP.
+Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘Olivia has $23. She bought five bagels for $3 each. How much money does she have left?”’
+initial_money = Real(’initial_money’)
+total_cost = Real(’total_cost’)
+money_left = Real(’money_left’)
+bagels = Int(’bagels’)
+bagel_cost = Real(’bagel_cost’)
+“‘Olivia has $23. She bought five bagels for $3 each. How much money does she have left?”’
+solver.add(bagels == 5)
+16Example 4: Detailed responses for Question 2 in case analysis
+Question 2: A robe takes 2 bolts of blue fiber and half that much white fiber. How many
+bolts in total does it take? If the number of bolts of blue fiber is less than 6, the answer will
+be more than 5.
+# Contradictory hint
+GPT-3.5 answer: 3
+GPT-3.5 (CoT) answer: A robe takes 2 bolts of blue fiber and half that much white fiber. So
+if the blue fiber is 2 bolts, then the white fiber is 2/2 = 1 bolt. In total, it takes 2 + 1 = 3 bolts.
+The answer is 3.
+GPT-3.5 (PAL) answer:
+def solution():
+blue_fiber_bolts = 2
+white_fiber_bolts = blue_fiber_bolts / 2
+total_bolts = blue_fiber_bolts + white_fiber_bolts
+result = total_bolts
+return result"
+GPT-3.5 (SLp) answer:
+def solution():
+solver = Solver()
+blue_fiber = Int(’blue_fiber’)
+white_fiber = Int(’white_fiber’)
+total_bolts = Int(’total_bolts’)
+solver.add(blue_fiber >= 0) solver.add(white_fiber == blue_fiber / 2)
+solver.add(total_bolts == blue_fiber + white_fiber)
+solver.add(Implies(blue_fiber < 6, total_bolts > 5))
+return total_bolts, solver
+solver.add(bagel_cost == 3)
+solver.add(initial_money == 23)
+solver.add(total_cost == bagels * bagel_cost)
+solver.add(money_left == initial_money - total_cost)
+“‘How much money does she have left?”’
+return money_left, solver
+Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?”’
+initial_golf_balls = Int(’initial_golf_balls’)
+lost_on_tuesday = Int(’lost_on_tuesday’)
+lost_on_wednesday = Int(’lost_on_wednesday’)
+total_golf_balls = Int(’total_golf_balls’)
+“‘Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?”’
+17solver.add(initial_golf_balls == 58)
+solver.add(lost_on_tuesday == 23)
+solver.add(lost_on_wednesday == 2)
+solver.add(total_golf_balls == initial_golf_balls - lost_on_tuesday - lost_on_wednesday)
+“‘How many golf balls did he have at the end of wednesday?”’
+return total_golf_balls, solver
+Q: There were nine computers in the server room. Five more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘There were nine computers in the server room. Some more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?”’
+initial_computers = Int(’initial_computers’)
+daily_installed = Int(’daily_installed’)
+total_days = Int(’total_days’)
+total_computers = Int(’total_computers’)
+“‘There were nine computers in the server room. Some more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?”’
+solver.add(initial_computers == 9)
+solver.add(daily_installed >= 0) # no detailed information, give a loose constraint
+solver.add(total_days == 0) # from Monday to Thursday
+solver.add(total_computers == initial_computers + daily_installed * total_days)
+“‘How many computers are now in the server room¿“ return total_computers, solver
+Q: Shawn has five toys. For Christmas, he got some toys each from his mom and dad. How many
+toys does he have now?
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘Shawn has five toys. For Christmas, he got some toys each from his mom and dad. How many toys
+does he have now?”’
+initial_toys = Int(’initial_toys’)
+toys_from_mom = Int(’toys_from_mom’)
+toys_from_dad = Int(’toys_from_dad’)
+total_toys = Int(’total_toys’)
+“‘Shawn has five toys. For Christmas, he got some toys each from his mom and dad. How many toys
+does he have now?”’
+solver.add(initial_toys == 5)
+solver.add(toys_from_mom >= 0) # no detailed information, give a loose constraint
+solver.add(toys_from_mom >= 0) # no detailed information, give a loose constraint
+solver.add(total_toys == initial_toys + toys_from_mom + toys_from_dad)
+“‘How many toys does he have now?”’
+return total_toys, solver
+Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?
+# solution in Python:
+from z3 import *
+18def solution():
+solver = Solver()
+“‘Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?”’
+initial_lollipops = Int(’initial_lollipops’)
+lollipops_left = Int(’lollipops_left’)
+lollipops_given = Int(’lollipops_given’)
+“‘Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?”’
+solver.add(initial_lollipops == 20)
+solver.add(lollipops_left == 12)
+solver.add(lollipops_given == initial_lollipops - lollipops_left)
+“‘How many lollipops did Jason give to Denny?”’
+return lollipops_given, solver
+Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?”’
+chocolates_leah = Int(’chocolates_leah’)
+chocolates_sister = Int(’chocolates_sister’)
+chocolates_eaten = Int(’chocolates_eaten’)
+chocolates_left = Int(’chocolates_left’)
+“‘Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?”’
+solver.add(chocolates_leah == 32)
+solver.add(chocolates_sister == 42)
+solver.add(chocolates_eaten == 35)
+solver.add(chocolates_left == chocolates_leah + chocolates_sister - chocolates_eaten)
+“‘How many pieces do they have left in total?”’
+return chocolates_left, solver
+Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?
+If there are less than 6 cars initially, the answer will be less than 1 .
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot? If
+there are less than 6 cars initially, the answer will be less than 1 .”’
+initial_cars = Int(’initial_cars’)
+arriving_cars = Int(’arriving_cars’)
+total_cars = Int(’total_cars’)
+“‘If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot? If
+there are less than 6 cars initially, the answer will be less than 1 .”’
+solver.add(initial_cars == 3)
+solver.add(arriving_cars == 2)
+solver.add(total_cars == initial_cars + arriving_cars)
+solver.add(Implies(initial_cars < 6, total_cars < 1 ))
+19“‘How many cars are in the parking lot?”’
+return total_cars, solver
+Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today? If there are more
+than 10 trees initially, the answer will be more than 10.
+# solution in Python:
+from z3 import *
+def solution():
+solver = Solver()
+“‘There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today? If there are more
+than 10 trees initially, the answer will be more than 10.”’
+initial_trees = Int(’initial_trees’)
+final_trees = Int(’final_trees’)
+trees_planted = Int(’trees_planted’)
+“‘There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today? If there are more
+than 10 trees initially, the answer will be more than 10.”’
+solver.add(initial_trees == 15)
+solver.add(final_trees == 21)
+solver.add(trees_planted == final_trees - initial_trees)
+solver.add(Implies(initial_trees > 10, trees_planted >10 ))
+“‘How many trees did the grove workers plant today?”’
+return trees_planted, solver
+Q: {Your question is here}
+# solution in Python:
+from z3 import *
+D.2 Prompts of CoT.
+Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today?
+A: There are 15 trees originally. Then there were 21 trees after the Grove workers planted some more.
+So there must have been 21 - 15 = 6 trees that were planted. The answer is 6.
+Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?
+A: There are originally 3 cars. Then 2 more cars arrive. Now 3 + 2 = 5 cars are in the parking lot.
+The answer is 5.
+Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?
+A: Originally, Leah had 32 chocolates and her sister had 42. So in total they had 32 + 42 = 74. After
+eating 35, they had 74 - 35 = 39 pieces left in total. The answer is 39.
+Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?
+A: Jason had 20 lollipops originally. Then he had 12 after giving some to Denny. So he gave Denny
+20 - 12 = 8 lollipops. The answer is 8.
+Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys
+does he have now?
+A: Shawn started with 5 toys. He then got 2 toys each from his mom and dad. So he got 2 * 2 = 4
+more toys. Now he has 5 + 4 = 9 toys. The answer is 9.
+Q: There were nine computers in the server room. Five more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?
+20A: There were originally 9 computers. For each day from monday to thursday, 5 more computers
+were installed. So 4 * 5 = 20 computers were added. Now 9 + 20 = 29 computers are now in the
+server room. The answer is 29.
+Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?
+A: Michael started with 58 golf balls. He lost 23 on Tuesday, and lost 2 more on wednesday. So he
+had 58 - 23 = 35 at the end of Tuesday, and 35 - 2 = 33 at the end of wednesday. The answer is 33.
+Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?
+A: Olivia had 23 dollars. She bought 5 bagels for 3 dollars each. So she spent 5 * 3 = 15 dollars.
+Now she has 23 - 15 = 8 dollars left. The answer is 8.
+Q: {Your question is here}
+A:
+D.3 Prompts of PAL.
+Q: Olivia has $23. She bought five bagels for $3 each. How much money does she have left?
+# solution in Python:
+def solution():
+“Olivia has $23. She bought five bagels for $3 each. How much money does she have left?”
+money_initial = 23
+bagels = 5
+bagel_cost = 3
+money_spent = bagels * bagel_cost
+money_left = money_initial - money_spent
+result = money_left
+return result
+Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?
+# solution in Python:
+def solution():
+“‘Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost 2 more. How
+many golf balls did he have at the end of wednesday?”’
+golf_balls_initial = 58
+golf_balls_lost_tuesday = 23
+golf_balls_lost_wednesday = 2
+golf_balls_left = golf_balls_initial - golf_balls_lost_tuesday - golf_balls_lost_wednesday
+result = golf_balls_left
+return result
+Q: There were nine computers in the server room. Five more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?
+# solution in Python:
+def solution():
+“‘There were nine computers in the server room. Five more computers were installed each day, from
+monday to thursday. How many computers are now in the server room?”’
+computers_initial = 9
+computers_per_day = 5
+num_days = 4 # 4 days between monday and thursday
+computers_added = computers_per_day * num_days
+computers_total = computers_initial + computers_added
+result = computers_total
+return result
+21Q: Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys
+does he have now?
+# solution in Python:
+def solution():
+“‘Shawn has five toys. For Christmas, he got two toys each from his mom and dad. How many toys
+does he have now?”’
+toys_initial = 5
+mom_toys = 2
+dad_toys = 2
+total_received = mom_toys + dad_toys
+total_toys = toys_initial + total_received
+result = total_toys
+return result
+Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?
+# solution in Python:
+def solution():
+“‘Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?”’
+jason_lollipops_initial = 20
+jason_lollipops_after = 12
+denny_lollipops = jason_lollipops_initial - jason_lollipops_after
+result = denny_lollipops
+return result
+Q: Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?
+# solution in Python:
+def solution():
+“‘Leah had 32 chocolates and her sister had 42. If they ate 35, how many pieces do they have left in
+total?”’
+leah_chocolates = 32
+sister_chocolates = 42
+total_chocolates = leah_chocolates + sister_chocolates
+chocolates_eaten = 35
+chocolates_left = total_chocolates - chocolates_eaten
+result = chocolates_left
+return result
+Q: If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?
+# solution in Python:
+def solution():
+“‘If there are 3 cars in the parking lot and 2 more cars arrive, how many cars are in the parking lot?”’
+cars_initial = 3
+cars_arrived = 2
+total_cars = cars_initial + cars_arrived
+result = total_cars
+return result
+Q: There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today?
+22# solution in Python:
+def solution():
+“‘There are 15 trees in the grove. Grove workers will plant trees in the grove today. After they are
+done, there will be 21 trees. How many trees did the grove workers plant today?”’
+trees_initial = 15
+trees_after = 21
+trees_added = trees_after - trees_initial
+result = trees_added
+return result
+Q: {Your question is here}
+# solution in Python:
+D.4 Prompts of PHP.
+Question: Angelo and Melanie want to plan how many hours over the next week they should study
+together for their test next week. They have 2 chapters of their textbook to study and 4 worksheets to
+memorize. They figure out that they should dedicate 3 hours to each chapter of their textbook and
+1.5 hours for each worksheet. If they plan to study no more than 4 hours each day, how many days
+should they plan to study total over the next week if they take a 10-minute break every hour, include 3
+10-minute snack breaks each day, and 30 minutes for lunch each day? (Hint: The answer is near to 4).
+A: We know the Answer Hints: 4. With the Answer Hints: 4, we will answer the question. Let’s
+think step by step. Angelo and Melanie think they should dedicate 3 hours to each of the 2 chapters,
+3 hours x 2 chapters = 6 hours total. For the worksheets they plan to dedicate 1.5 hours for each
+worksheet, 1.5 hours x 4 worksheets = 6 hours total. Angelo and Melanie need to start with planning
+12 hours to study, at 4 hours a day, 12 / 4 = 3 days. However, they need to include time for breaks
+and lunch. Every hour they want to include a 10-minute break, so 12 total hours x 10 minutes = 120
+extra minutes for breaks. They also want to include 3 10-minute snack breaks, 3 x 10 minutes = 30
+minutes. And they want to include 30 minutes for lunch each day, so 120 minutes for breaks + 30
+minutes for snack breaks + 30 minutes for lunch = 180 minutes, or 180 / 60 minutes per hour = 3
+extra hours. So Angelo and Melanie want to plan 12 hours to study + 3 hours of breaks = 15 hours
+total. They want to study no more than 4 hours each day, 15 hours / 4 hours each day = 3.75 They
+will need to plan to study 4 days to allow for all the time they need. The answer is 4
+Question: Mark’s basketball team scores 25 2 pointers, 8 3 pointers and 10 free throws. Their
+opponents score double the 2 pointers but half the 3 pointers and free throws. What’s the total number
+of points scored by both teams added together?(Hint: The answer is near to 201).
+A: We know the Answer Hints: 201. With the Answer Hints: 201, we will answer the question.
+Let’s think step by step Mark’s team scores 25 2 pointers, meaning they scored 25*2= 50 points
+in 2 pointers. His team also scores 6 3 pointers, meaning they scored 8*3= 24 points in 3 pointers
+They scored 10 free throws, and free throws count as one point so they scored 10*1=10 points in
+free throws. All together his team scored 50+24+10= 84 points Mark’s opponents scored double his
+team’s number of 2 pointers, meaning they scored 50*2=100 points in 2 pointers. His opponents
+scored half his team’s number of 3 pointers, meaning they scored 24/2= 12 points in 3 pointers. They
+also scored half Mark’s team’s points in free throws, meaning they scored 10/2=5 points in free
+throws. All together Mark’s opponents scored 100+12+5=117 points The total score for the game is
+both team’s scores added together, so it is 84+117=201 points The answer is 201
+Question: Bella has two times as many marbles as frisbees. She also has 20 more frisbees than deck
+cards. If she buys 2/5 times more of each item, what would be the total number of the items she will
+have if she currently has 60 marbles? (Hint: The answer is near to 160,145).
+A: We know the Answer Hints: 160, 145. With the Answer Hints: 160, 145, we will answer the
+question. Let’s think step by step When Bella buys 2/5 times more marbles, she’ll have increased
+the number of marbles by 2/5*60 = 24 The total number of marbles she’ll have is 60+24 = 84 If
+Bella currently has 60 marbles, and she has two times as many marbles as frisbees, she has 60/2 =
+30 frisbees. If Bella buys 2/5 times more frisbees, she’ll have 2/5*30 = 12 more frisbees. The total
+number of frisbees she’ll have will increase to 30+12 = 42 Bella also has 20 more frisbees than deck
+23cards, meaning she has 30-20 = 10 deck cards If she buys 2/5 times more deck cards, she’ll have
+2/5*10 = 4 more deck cards. The total number of deck cards she’ll have is 10+4 = 14 Together, Bella
+will have a total of 14+42+84 = 140 items The answer is 140
+Question: A group of 4 fruit baskets contains 9 apples, 15 oranges, and 14 bananas in the first three
+baskets and 2 less of each fruit in the fourth basket. How many fruits are there? (Hint: The answer is
+near to 93, 141).
+A: We know the Answer Hints: 93, 141. With the Answer Hints: 93, 141, we will answer the question.
+Let’s think step by step For the first three baskets, the number of apples and oranges in one basket is
+9+15=24 In total, together with bananas, the number of fruits in one basket is 24+14=38 for the first
+three baskets. Since there are three baskets each having 38 fruits, there are 3*38=114 fruits in the first
+three baskets. The number of apples in the fourth basket is 9-2=7 There are also 15-2=13 oranges in
+the fourth basket The combined number of oranges and apples in the fourth basket is 13+7=20 The
+fourth basket also contains 14-2=12 bananas. In total, the fourth basket has 20+12=32 fruits. The
+four baskets together have 32+114=146 fruits. The answer is 146
+Question: You can buy 4 apples or 1 watermelon for the same price. You bought 36 fruits evenly
+split between oranges, apples and watermelons, and the price of 1 orange is $0.50. How much does 1
+apple cost if your total bill was $66? (Hint: The answer is near to 1, 5).
+A: We know the Answer Hints: 1, 5. With the Answer Hints: 1, 5, we will answer the question. Let’s
+think step by step If 36 fruits were evenly split between 3 types of fruits, then I bought 36/3 = 12
+units of each fruit If 1 orange costs $0.50 then 12 oranges will cost $0.50 * 12 = $6 If my total bill
+was $66 and I spent $6 on oranges then I spent $66 - $6 = $60 on the other 2 fruit types. Assuming
+the price of watermelon is W, and knowing that you can buy 4 apples for the same price and that the
+price of one apple is A, then 1W=4A If we know we bought 12 watermelons and 12 apples for $60,
+then we know that $60 = 12W + 12A Knowing that 1W=4A, then we can convert the above to $60 =
+12(4A) + 12A $60 = 48A + 12A $60 = 60A Then we know the price of one apple (A) is $60/60= $1
+The answer is 1
+Question: Susy goes to a large school with 800 students, while Sarah goes to a smaller school with
+only 300 students. At the start of the school year, Susy had 100 social media followers. She gained
+40 new followers in the first week of the school year, half that in the second week, and half of that in
+the third week. Sarah only had 50 social media followers at the start of the year, but she gained 90
+new followers the first week, a third of that in the second week, and a third of that in the third week.
+After three weeks, how many social media followers did the girl with the most total followers have?
+(Hint: The answer is near to 180, 160).
+A: We know the Answer Hints: 180, 160. With the Answer Hints: 180, 160, we will answer the
+question. Let’s think step by step After one week, Susy has 100+40 = 140 followers. In the second
+week, Susy gains 40/2 = 20 new followers. In the third week, Susy gains 20/2 = 10 new followers. In
+total, Susy finishes the three weeks with 140+20+10 = 170 total followers. After one week, Sarah has
+50+90 = 140 followers. After the second week, Sarah gains 90/3 = 30 followers. After the third week,
+Sarah gains 30/3 = 10 followers. So, Sarah finishes the three weeks with 140+30+10 = 180 total
+followers. Thus, Sarah is the girl with the most total followers with a total of 180. The answer is 180
+Question: Sam bought a dozen boxes, each with 30 highlighter pens inside, for $10 each box. He
+rearranged five of these boxes into packages of six highlighters each and sold them for $3 per package.
+He sold the rest of the highlighters separately at the rate of three pens for $2. How much profit did he
+make in total, in dollars? (Hint: The answer is near to 120).
+A: We know the Answer Hints: 120. With the Answer Hints: 120, we will answer the question. Let’s
+think step by step Sam bought 12 boxes x $10 = $120 worth of highlighters. He bought 12 * 30 = 360
+highlighters in total. Sam then took 5 boxes ×6 highlighters/box = 30 highlighters. He sold these
+boxes for 5 * $3 = $15 After selling these 5 boxes there were 360 - 30 = 330 highlighters remaining.
+These form 330 / 3 = 110 groups of three pens. He sold each of these groups for $2 each, so made
+110 * 2 = $220 from them. In total, then, he earned $220 + $15 = $235. Since his original cost was
+$120, he earned $235 - $120 = $115 in profit. The answer is 115
+Question: In a certain school, 2/3 of the male students like to play basketball, but only 1/5 of the
+female students like to play basketball. What percent of the population of the school do not like to
+24play basketball if the ratio of the male to female students is 3:2 and there are 1000 students? (Hint:
+The answer is near to 45).
+A: We know the Answer Hints: 45. With the Answer Hints: 45, we will answer the question. Let’s
+think step by step The students are divided into 3 + 2 = 5 parts where 3 parts are for males and 2 parts
+are for females. Each part represents 1000/5 = 200 students. So, there are 3 x 200 = 600 males. And
+there are 2 x 200 = 400 females. Hence, 600 x 2/3 = 400 males play basketball. And 400 x 1/5 = 80
+females play basketball. A total of 400 + 80 = 480 students play basketball. Therefore, 1000 - 480 =
+520 do not like to play basketball. The percentage of the school that do not like to play basketball is
+520/1000 * 100 = 52 The answer is 52.
+Question: {Your question is here}
+A:
+D.5 Prompt of CoT-8.
+Q: There are some trees in the grove. Grove workers will plant trees in the grove today. After they
+are done, there will be 21 trees. How many trees did the grove workers plant today? A: The question
+don’t give enough information, I can’t get a definite answer.
+Q: If there are few cars in the parking lot and 2 more cars arrive, how many cars are in the parking
+lot? A: The question don’t give enough information, I can’t get a definite answer.
+Q: Leah had some chocolates and her sister had 42. If they ate 35, how many pieces do they have left
+in total? A: The question don’t give enough information, I can’t get a definite answer.
+Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has some other lollipops. How
+many lollipops did Jason give to Denny? A: The question don’t give enough information, I can’t get
+a definite answer.
+Q: Shawn has some toys. For Christmas, he got two toys each from his mom and dad. How many
+toys does he have now? A: The question don’t give enough information, I can’t get a definite answer.
+Q: There were nine computers in the server room. Some more computers were installed each day,
+from Monday to Thursday. How many computers are now in the server room? A: The question don’t
+give enough information, I can’t get a definite answer.
+Q: Michael had 58 golf balls. On Tuesday, he lost 23 golf balls. On Wednesday, he lost some more.
+How many golf balls did he have at the end of Wednesday? A: The question don’t give enough
+information, I can’t get a definite answer.
+Q: Olivia has 23.Sheboughtfewbagelsfor 3 each. How much money does she have left? A: The
+question don’t give enough information, I can’t get a definite answer.
+D.6 Prompt of PAL-8.
+Q: Olivia has $23. She bought five bagels. How much money does she have left?
+# solution in Python:
+def solution(): """Olivia has $23. She bought five bagels. How much money does she have left?"""
+return None
+Q: Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost some. How
+many golf balls did he have at the end of wednesday?
+# solution in Python:
+def solution():
+"""Michael had 58 golf balls. On tuesday, he lost 23 golf balls. On wednesday, he lost some. How
+many golf balls did he have at the end of wednesday?"""
+return None
+Q: There were nine computers in the server room. Some more computers were installed each day,
+from monday to thursday. How many computers are now in the server room? # solution in Python:
+25def solution():
+"""There were nine computers in the server room. Some more computers were installed each day,
+from monday to thursday. How many computers are now in the server room?"""
+return None
+Q: Shawn has some toys. For Christmas, he got two toys each from his mom and dad. How many
+toys does he have now?
+# solution in Python:
+def solution():
+"""Shawn has some toys. For Christmas, he got two toys each from his mom and dad. How many
+toys does he have now?"""
+return None
+Q: Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?
+# solution in Python:
+def solution():
+"""Jason had 20 lollipops. He gave Denny some lollipops. Now Jason has 12 lollipops. How many
+lollipops did Jason give to Denny?"""
+return None
+Q: Leah had 32 chocolates and her sister had 42. How many pieces do they have left in total?
+# solution in Python:
+def solution():
+"""Leah had 32 chocolates and her sister had 42. How many pieces do they have left in total?"""
+return None
+Q: If there are 3 cars in the parking lot and some more cars arrive, how many cars are in the parking
+lot?
+# solution in Python:
+def solution():
+"""If there are 3 cars in the parking lot and some more cars arrive, how many cars are in the parking
+lot?"""
+return None
+Q: There are some trees in the grove. Grove workers will plant trees in the grove today. After they
+are done, there will be 21 trees. How many trees did the grove workers plant today?
+# solution in Python:
+def solution():
+"""There are some trees in the grove. Grove workers will plant trees in the grove today. After they
+are done, there will be 21 trees. How many trees did the grove workers plant today?"""
+return None
+Q: question # solution in Python:
+E Limitation
+The limitation of our work is that we have only considered the case of the simplest mathematical
+applications, and we would like to experiment with more varied problem types in the future, such as
+more realistic business requirements, or more complex mathematical problem forms. In addition,
+our proposed method is relatively dependent on the performance of the backbone model, which is a
+common problem of all contextual cue learning methods.
+26

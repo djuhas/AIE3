@@ -1,0 +1,1190 @@
+Massively Multiagent Minigames for
+Training Generalist Agents
+Kyoung Whan Choe ( 최경환), Ryan Sullivan, Joseph Suárez
+Abstract
+We present Meta MMO, a collection of many-agent minigames for use as a re-
+inforcement learning benchmark. Meta MMO is built on top of Neural MMO,
+a massively multiagent environment that has been the subject of two previous
+NeurIPS competitions. Our work expands Neural MMO with several computation-
+ally efficient minigames. We explore generalization across Meta MMO by learning
+to play several minigames with a single set of weights. We release the environment,
+baselines, and training code under the MIT license. We hope that Meta MMO
+will spur additional progress on Neural MMO and, more generally, will serve as a
+useful benchmark for many-agent generalization.
+1 Introduction
+Intelligence in the real world requires simultaneous competence on a broad range of tasks. The
+first wave of modern deep reinforcement learning (RL) research focused on narrow competency in
+individual tasks, such as singular Atari games [ 4,30]. This line of work evaluates generalization using
+sticky actions [ 29] or by using Atari games with different modes [ 13]. Several more recent benchmarks
+include procedural level generation [ 7,25] that enables more variation among environment instances.
+Multi-task environments like XLand [ 43,44], and Minecraft [ 15,23,24] introduce large distributions
+of objectives and training scenarios that demand even greater generalization.
+Of these, XLand has 2 agents and is not publicly available. The rest are single-agent. In contrast,
+Neural MMO features 100+ agents in a multi-task, open-source environment that allows us to study
+generalization across tasks, opponents, and maps [ 40,41]. In Neural MMO, agents are presented
+with diverse challenges including collecting resources, engaging in combat, training professions, and
+trading on a player-controlled market. Most of the progress on Neural MMO has been driven by
+competitions at NeurIPS and IJCAI totaling 1300+ participants. In the most recent NeurIPS 2023
+competition, participants trained goal-conditioned agents capable of completing a variety of tasks.
+Despite years of sustained interest, the best Neural MMO agents are only proficient at a few tasks
+and cannot reach high levels or play effectively as a team.
+Meta MMO extends Neural MMO with a diverse set of minigames. Our main contributions are:
+1.Meta MMO as a benchmark for many-agent generalization. Minigames feature free-for-all
+and team settings, built-in domain randomization, and adaptive difficulty.
+2.Optimized training up to 3x faster with minigames. Each of our experiments is run on a
+commercial off-the-shelf desktop with a single RTX 4090.
+3.A generalist agent capable of playing several minigames with a single set of weights. It is
+trained using PPO and a simple curriculum learning method.
+Neural MMO evaluates generalization over tasks, opponents, and maps. Meta MMO enables further
+evaluation over variations in gameplay mechanics and runs up to 10 times faster than Neural MMO 2.
+We demonstrate that a RL can learn sophisticated behaviors on multiple individual and team-based
+Preprint. Under review.arXiv:2406.05071v1  [cs.AI]  7 Jun 2024Figure 1: Meta MMO’s minigame framework enables fine-grained control over game objectives, agent
+spawning, team assignments, and various game elements. Subsystems manage resource generation,
+combat rules, NPC behavior, item supply, and market dynamics, each of which can be customized
+using configurable attributes (see Appendix A.1 for more details). These configurable settings provide
+a convenient method for creating adaptive difficulty, allowing for the implementation of curriculum
+learning techniques that gradually introduce agents to more challenging tasks during training.
+minigames with a single set of weights in less than a day of training using a single GPU. To support
+further research, we release Meta MMO, baselines, and training code1as free and open-source
+software under the MIT license.
+2 Meta MMO
+2.1 Minigame Design
+Meta MMO can be viewed as a sort of "configuration configuration" that allows users to specify
+multiple distributions of Neural MMO environments with different gameplay and objectives. As
+shown in Fig 1, Meta MMO provides fine-grained control over game elements including combat
+rules, NPC behavior, market rules, map size, terrain and resource generation, agent spawning rules,
+and win conditions. An explanation of each game system as well as a list of configurable attributes
+is listed in Appendix A.1. Meta MMO also hooks into the Neural MMO task system [ 41], which
+allows flexible objective assignment to arbitrary groups of agents. One particularly useful property of
+Meta MMO is that it provides a convenient method of creating adaptive difficulty. This produces a
+form of curriculum learning by which agents are gradually introduced to harder tasks over the course
+of training (Appendix A.2). To our knowledge, these features are unique to our work: they are not
+available in the base Neural MMO environment or in any other setting of comparable complexity.
+2.2 Implemented Minigames
+This work includes implementations of several minigames that showcase the flexibility and diversity
+of Meta MMO. Additionally, we include the rulesets of the 2022 and 2023 Neural MMO competitions
+as separate minigames called Team Battle and Multi-task Training respectively. A.3 provides links to
+a sample of minigame replays.
+Survival is the default Meta MMO minigame. The objective for each agent is to stay alive until the
+end of the episode (1024 ticks). 128 agents are spawned around the edge of a 128x128 map and
+rewarded for each tick they survive. By default, this minigame runs with all the game elements, but it
+can also be minimized to competitive foraging with no direct combat.
+Team Battle replicates the 2022 NeurIPS Neural MMO challenge, where the last team standing wins.
+16 teams of 8 agents are spawned around the edge of a 128x128 map, with team members starting in
+the same tile. Agents are rewarded for each tick they remain alive. Compared to the challenging 2022
+1https://github.com/kywch/meta-mmo
+2Figure 2: Snapshots of King of the Hill (A) and Sandwich (B), showcasing the same policy’s
+adaptability to different game settings. (A)When the resource subsystem is enabled , team members
+spread out to forage for food and water. (B)When the resource subsystem is disabled , each team
+groups together to maximize their offensive and defensive capabilities.
+competition, this minigame provides additional configuration options for simplifying the task, such
+as by disabling the need to forage for food.
+Multi-task Training/Evaluation replicates the 2023 NeurIPS Neural MMO challenge, a free-for-all
+that evaluated how well agents could generalize to tasks, opponents, and maps not seen during
+training. We include the 1,298 training tasks and 63 evaluation tasks (Appendix A.4) used in the
+competition. 128 agents are spawned around the edge of a 128x128 map and assigned random tasks
+from the task set. Agents are rewarded for progress toward completing their task, defined using the
+original 2023 competition metrics.
+In addition to expanding the configuration options for the competition rulesets, we introduce four
+new minigames. These showcase the diversity of games that can be created by combining existing
+Neural MMO components.
+Protect the King is a variation of Team Battle where each team has a designated leader. If the leader
+dies, the entire team is eliminated. Succeeding in this environment requires an additional layer of
+coordination and strategy.
+Race to the Center focuses on foraging and navigation. An agent wins if it reaches the center tile
+first. This minigame requires agents to forage for food and water efficiently on the way to the center.
+The map size can be adaptively scaled from 40x40 to 128x128 to increase the difficulty as agents
+improve (Appendix A.2).
+King of the Hill (Fig. 2A) combines foraging and team combat in a 60x60 map. A team consists of
+8 agents and wins by seizing and defending the center tile for a specified duration. If no team has
+3seized the center by the time the episode ends, there is no winner. Teams must forage, survive, and
+fend off other teams, making it difficult to maintain control of the hill for long. The required defense
+duration can also be adaptively scaled from 10 to 200 ticks as agents become more proficient.
+Sandwich (Fig. 2B) focuses on team combat against NPCs and other teams in an 80x80 map. Eight
+teams of 16 agents each are spawned in a circle. To win, a team must defeat all other teams and
+survive for at least 500 ticks. This minigame does not include foraging, but it features three external
+threats: (1) scripted NPCs spawned at the edge of the map, (2) a death fog pushing agents towards the
+center, and (3) NPCs constantly being spawned from the center of the map. The number of spawned
+NPCs can be adaptively increased throughout training.
+2.3 Team Game Support
+The core Neural MMO environment does not assume any relationships between agents, does not
+impose any constraints on actions, and does not provide masks based on team assignments. For
+example, agents on the same team can attack and potentially kill their teammates, and agents can
+give items or gold to opposing agents. In Meta MMO, we create a general wrapper for team-based
+minigames that implements the following functions:
+Action Masking : Meta MMO masks attack actions targeting an agent’s teammates, which could
+delay learning in the previous iterations of Neural MMO.
+Shared Reward : Meta MMO implements team-level reward using the built-in task system.
+Minigames can define and assign tasks to each team. In the current baseline, the team task reward is
+added to the individual agents’ rewards.
+Observation Augmentation : Neural MMO’s observations do not include team information. To
+facilitate collaboration, Meta MMO augments the entity and tile observations to indicate which agents
+belong to which team. This led to an increase in coordination in our experiments.
+Spawning : Neural MMO can be particularly sensitive to initial conditions. Meta MMO can be
+configured to spawns agents on the same team at the same location on the edge of the map. This
+behavior can be set per episode, supporting game-dependent team spawning. Minigames can also set
+custom spawn locations or create custom spawning behaviors if necessary.
+Communication : Neural MMO provides a basic communication system that lets agents sent an
+integer token (1-127) to all agents within visual range. Meta MMO provides a communication protocol
+that allows an agent to instead broadcast its health, the number of nearby NPCs and foes, and the
+presence of key targets. This could enable agents to share information beyond their visual range and
+develop communication protocols, though we leave a thorough study of multi-agent communication
+in Meta MMO for future work.
+Table 1: Game subsystems enabled in each minigame. Team Battle was used in both Full and Mini
+Config experiments but with different subsystems enabled. Extras: The rest of the subsystems – Item,
+Equipment, Profession, Progression, and Exchange.
+Experiment Minigame Team Resources Combat NPC Comm Extras
+Full ConfigSurvival ✓ ✓ ✓ ✓ ✓
+Team Battle ✓ ✓ ✓ ✓ ✓ ✓
+Multi-task Training ✓ ✓ ✓ ✓ ✓
+Mini ConfigTeam Battle ✓ ✓ ✓ ✓ ✓
+Protect the King ✓ ✓ ✓ ✓ ✓
+Race to the Center ✓
+King of the Hill ✓ ✓ ✓ ✓
+Sandwich ✓ ✓ ✓ ✓
+4Figure 3: Training curves for the Full Config experiment. For the generalist policy, only samples from
+the target minigame were counted. As training progresses, agents learn to survive longer, engage with
+more game subsystems (Appendix A.8), and encounter diverse events, as evidenced by the unique
+event count.
+3 Experiments
+We train generalist policies capable of playing multiple games with a single set of weights. Throughout
+this section, we will refer to the Appendix, which contains extensive environment and experimental
+details. Our experiments consider two sets of Meta MMO configurations. The "full" configuration
+features resource collection, combat, professions, trade, and all of the other complexities present in
+Neural MMO. In the "mini" config, each minigame uses a subset of the following: team-based play,
+resource collection, combat, NPCs, and communication. For each configuration, we trained two types
+of policies: specialists andgeneralist .Specialist policies learn to play a single minigame. Generalist
+policies were trained on multiple minigames simultaneously. The full experimental details are stated
+in Appendix A.5.
+Our main result is as follows: a generalist can match the capability of a specialist when trained
+on the same number of samples from the target task. Using a simple curriculum learning method,
+adding samples from other tasks does not degrade performance on the target task. Instead, the
+generalist is able to simultaneously solve several minigames. Stated differently: generalist policies
+performed comparably to or better than specialist policies after training on the same number of
+samples of the specialist’s task, plus extra auxiliary data.
+Our baseline builds upon the winning solution from the 2023 competition. The policy architecture
+(Appendix A.6) comprises encoders for tiles, agents, tasks, items, and market information, followed by
+a recurrent layer (LSTM [ 18]), an action decoder, and a value network head. We use the Independent
+PPO (IPPO) algorithm [ 8,39] with historical self-play, utilizing PufferLib’s Clean PuffeRL script,
+which extends CleanRL’s PPO implementation [19] to support many-agent training.
+Training and execution are performed in a decentralized manner using only local observations,
+allowing flexible team sizes and compositions. We provide trained checkpoints at various training
+steps, along with scripts for evaluation using either an Elo rating system for competitive games or task
+completion metrics tailored for the multi-task setting (Appendix A.7). The trained models, training
+scripts, and hyperparameters are publicly available in our GitHub repository.
+3.1 Full Config Experiment
+We trained specialist policies for Survival, Team Battle, and Multi-task Training, respectively, and a
+generalist policy that can play all three minigames. Figure 3 shows the training curves of the policies.
+As training progresses, agents learn to survive longer and engage with more game subsystems
+(Appendix A.8).
+To evaluate the trained policies (Figure 4), we used multiple metrics. We used Elo rating for Survival
+and Team Battle, where the last standing agent or team is declared the winner, and task completion
+rate for Multi-task Training. To ensure a fair comparison with the training samples, we selected
+5checkpoints at 25M, 50M, 75M, and 100M agent steps for specialist policies, and checkpoints at
+100M, 200M, 300M, and 400M agent steps for the generalist policy.
+As a sanity check, we confirmed that training on more samples results in a better policy. In Survival
+and Team Battle, we observed that the generalist policy performed better than the specialist policies
+even when trained with fewer samples, suggesting that the generalist policy benefited from positive
+transfer learning. In Multi-task Evaluation, the generalist and specialist policies performed comparably
+across all training sample sizes tested.
+At the same time, the task completion rate below 16% observed in Multi-task Evaluation, even for
+the best-performing checkpoint, underscores the significant challenges posed by Meta MMO. It is
+also important to note that these evaluations were conducted in a "checkpoint vs. checkpoint" setting,
+where the increasing capability of opponents makes maintaining current score levels more difficult,
+further emphasizing the inherent complexity of multi-agent RL.
+Figure 4: Evaluations for the Full Config experiment. See Appendix A.7 for methods. An Elo rating
+of 1000 represents the initial anchor value. Training samples of the generalist checkpoints were
+adjusted based on the minigame sampling ratio during training (Appendix A.9).
+3.2 Mini Config Experiment
+This section explores the optimization benefits of Meta MMO. Using a restricted set of Neural
+MMO’s features, as in Mini Config, causes the environment runs faster and the action and observation
+spaces to become smaller. As a result, the overall training throughput can be increased more than
+twofold compared to the full configuration (Table 2).
+Figure 5 displays the training curves of the policies with different metrics as proxies for learning,
+depending on the minigame. In Team Battle and Protect the King, which are team survival games,
+trained agents survive longer. Race to the Center is easily solved by baseline agents, and after training,
+the agents’ starting locations largely determine the winner; agents starting on the node should travel
+twice as far as those starting on the edges. For King of the Hill, we observed that after training,
+possession of the center tile switched multiple times until the end. See Appendix A.3 for a sample of
+replays for each minigame.
+We also observed agents adapting their behavior based on the game dynamics caused by toggling a
+subsystem (Figure 2). When the resource subsystem is enabled, as in King of the Hill, team members
+spread out to forage for food and water, because it takes time for a foliage tile to regenerate its
+resources. However, when the resource subsystem is disabled (i.e., Sandwich), each team moves in
+tight formations, maximizing their offensive and defensive capabilities.
+We used Elo to assess the competency of the trained policies (Figure 6). The generalist policy
+outperformed the specialist policies with less training samples in Team Battle, Protect the King, Race
+to the Center, and King of the Hill. This was most pronounced in the more challenging minigames
+like Protect the King and King of the Hill, where the objectives were harder (e.g., protecting the key
+agent or tile). In Sandwich, the generalist policy performed comparably to the specialist policy.
+6Figure 5: Training curves for the Mini Config experiment, showing metrics specific to each minigame.
+In Team Battle and Protect the King, agent lifespan increases with training. In Race to the Center and
+King of the Hill, agents learned to navigate maps and hold the center within 25M steps. In Sandwich,
+the generalist policy did not converge to the maximum NPC multiplier after 100M steps.
+Figure 6: Evaluations for the Mini Config experiment. Training samples of the generalist checkpoints
+were adjusted based on the minigame sampling ratio during training (Appendix A.9).
+4 Related Work
+Previous works like IMPALA [ 12] and PopArt [ 17] have trained multi-task polices on multiple
+distinct Atari environments. The field of curriculum learning and unsupervised environment design
+seek to train agents that are competent at a broad range of tasks in multi-task environments [ 9,20,21].
+These works typically focus on closely related tasks, such as environment seeds or map configurations.
+Other recent works such as Gato [ 35], Genie [ 6], and SIMA [ 45] learn to play diverse sets of games
+from large-scale offline datasets rather than online interaction with the environment.
+NetHack [ 25] and MiniHack [ 38] exemplify how simplifying complex environments can accelerate
+research progress. NetHack is a procedurally generated stochastic video game with hundreds of
+Table 2: Training performance. Throughput is the average agent steps per second during the entire
+RL learning process, providing a realistic wall time estimate for training.
+Experiment Minigame/Note Agent Steps Duration Throughput
+Full ConfigSurvival 100 M 9h 46m 2858
+Team Battle 100 M 9h 15m 3019
+Multi-task Training 100 M 11h 00m 2535
+Generalist 400 M 37h 17m 2997
+Mini ConfigTeam Battle 101 M 4h 08m 6758
+Protect the King 100 M 4h 40m 5976
+Race to the Center 100 M 3h 28m 8047
+King of the Hill 100 M 4h 11m 6672
+Sandwich 100 M 3h 48m 7359
+Generalist 400 M 16h 17m 6866
+2023 NeurIPS Competition
+NMMO 2.0 Multi-taskCompetition Baseline 10 M 3h 34m 779
+7enemies, items, and playable characters. Winning a game of NetHack is incredibly challenging
+even for proficient human players, making it difficult for researchers to make reasonable progress.
+MiniHack was introduced as a small scale, flexible framework for building NetHack levels and
+testing specific objectives. This benchmark has led to significant progress on curriculum learning,
+unsupervised environment design, and exploration [ 16,22]. Similarly, our work takes the most
+difficult many-agent RL benchmark and provides a flexible tool for designing small-scale challenges
+within the Neural MMO framework.
+Other many-agent environments exist to support different research focuses. Griddly [ 3], Megaverse
+[34], and Melting Pot [ 1,27] facilitate rapid prototyping and generation of diverse scenarios, but
+typically involve fewer agents. Multi-particle environments [ 28], VMAS [ 5], JaxMARL [ 36], and
+Gigastep [ 26] prioritize efficient many-agent communication and coordination, but with simpler
+per-agent complexity. Lux AI [ 10,42], SMAC [ 37], and SMAC V2 [ 11] feature heterogeneous agent
+teams trained on fixed objectives and are limited to two-team scenarios. Hide-and-Seek [ 2] teaches
+a small number of agents to hide from their opponents by manipulating a few interactive objects.
+XLand [ 43,44] offers a diverse task space and up to three agents, but is not open source and requires
+prohibitively expensive training for academic budgets. XLand-Minigrid [ 32] introduced an efficient
+grid-based implementation of XLand’s task system but does not currently support multiagent games.
+Broadly, they are all either complex environments with few agents or simple environments with many
+agents.
+Meta MMO differs from these environments by introducing minigames that feature a large population
+of agents, multiple teams with flexible sizes, high per-agent complexity, and the flexibility to define
+diverse environments and objectives. The platform accommodates both intra-team collaboration and
+inter-team competition on a large scale. All of these features are provided within an open-source and
+computationally efficient framework, positioning this work as a valuable contribution to the study of
+generalization and skill transfer in many-agent RL.
+5 Discussion
+Task vs. Minigames . Neural MMO 2 is sufficiently rich, making it possible to define meaningfully
+different objectives (e.g., reach the center tile vs. make profit from trade, last team standing vs.
+protect the leader) within the same simulation, similar to XLand [ 43,44]. However, minigames with
+different subsystem configurations can lead to even more distinct challenges. For example, enabling
+the resources subsystem encourages agents to spread out and forage, while disabling it with the
+combat subsystem encourages agents to group up and fight together (Figure 2).
+Meta MMO’s minigames also allow researchers to optimize training performance by selectively
+enabling subsystems. Improvements in the environment, infrastructure, and hyperparameters have
+resulted in 3x faster training compared to the previous competition baseline2(Table 2). By using Meta
+MMO to select minimal subsystems, researchers can also triple the training speed for specific research
+questions, then generalize by gradually adding complexity similar to the approach in MiniHack [ 38].
+Meta MMO simplifies generalization experiments across diverse minigames by maintaining consistent
+observation/action spaces. Furthermore, since Meta MMO’s tasks and minigames are defined in code,
+it is possible to generate novel tasks and minigames endlessly, enabling open-ended learning based
+on unsupervised environment design [9, 47].
+Strength of Generalization . While minigames may be more distant from each other than tasks,
+they are still closer to each other than completely independent games. They share common elements
+such as the structure of observations and basic gameplay features. At the same time, there are few
+successes in the literature concerning generalization at small scale, and even fewer in many-agent
+learning settings. We claim no method for evaluating how impressive our results are, save that our
+environments are likely to be useful to other researchers. However, we would like to take a moment
+to address the problem of evaluation more broadly.
+A major difficulty of work in this space is that there is little intuition as to what we should expect.
+A person that plays one Atari game may then be able to learn to play a second more quickly, but a
+person also benefits from a wealth of external knowledge. It is quite likely that, from the perspective
+of any reasonable tabula rasa learner, two Atari games will look much more different from each other
+2https://github.com/NeuralMMO/baselines/tree/2.0
+8than they look to a human. This makes quantifying "reasonable" transfer performance difficult. One
+might assume that the broader the training curriculum, the more likely it is that there is room for
+positive transfer. In Gato [ 35], the authors showed positive transfer with around 600 tasks. In our
+case, we are surprised that it works at all with only a handful of tasks, even taking into account the
+relative similarities of minigames and the presence of domain randomization. Previously, we had
+expected to only achieve competence over one randomized minigame per policy.
+The Meta MMO baseline has incorporated multi-task training, allowing agents to learn a complex
+task embedding space produced by large language models (LLMs) and perform zero-shot gener-
+alization to unseen tasks. The success of this approach likely depends on the LLM’s performance,
+code comprehension, and prompt design. Although the training required for good generalization
+is uncertain, Meta MMO’s faster training is beneficial. These features collectively provide a rich
+playground for curriculum learning research.
+Multiagent Coordination . We observed compelling team behaviors, with stronger team performance
+emerging from increased training. IPPO, which uses only local observations for decentralized training
+and execution, performed well in our experiments, consistent with previous research [ 8,11,48].
+IPPO’s advantages include compatibility with arbitrary team sizes and efficiency in training and
+inference. In contrast, pooling all team agents’ observations can substantially slow training; the 2022
+competition winner solution took weeks to train. Future research should explore other multi-agent
+RL algorithms to further improve team performance and training efficiency. Meta MMO provides a
+complex, yet efficient many-agent environment that can democratize research in coordination, credit
+assignment [33], multiagent autocurricula [2], and the emergence of language [31].
+Limitations . Meta MMO may have game balance issues as the capable agents that can stress test
+the game mechanics became available only recently. Meta MMO does not have an interactive client,
+limiting its potential for human-multi-agent collaboration research. The lack of absolute scoring
+metrics makes multi-agent evaluation challenging, calling for an openly available diverse policy
+population and peer-to-peer arena.
+Potential Negative Societal Impacts . Meta MMO minigames are abstract game simulations with
+basic combat and commerce systems, substantially different from real-world counterparts. We believe
+that Meta MMO is not directly applicable to developing real-world systems with societal impact. Its
+primary goal is to advance research on learning agents’ capabilities.
+9Acknowledgments and Disclosure of Funding
+We thank PufferAI for sponsoring the compute used in this work.
+References
+[1]J. P. Agapiou, A. S. Vezhnevets, E. A. Duéñez-Guzmán, J. Matyas, Y . Mao, P. Sunehag,
+R. Köster, U. Madhushani, K. Kopparapu, R. Comanescu, D. Strouse, M. B. Johanson, S. Singh,
+J. Haas, I. Mordatch, D. Mobbs, and J. Z. Leibo. Melting pot 2.0, 2023.
+[2]B. Baker, I. Kanitscheider, T. Markov, Y . Wu, G. Powell, B. McGrew, and I. Mordatch. Emer-
+gent tool use from multi-agent autocurricula. In 8th International Conference on Learning
+Representations, ICLR 2020, Addis Ababa, Ethiopia, April 26-30, 2020 . OpenReview.net, 2020.
+URLhttps://openreview.net/forum?id=SkxpxJBKwS .
+[3] C. Bamford, S. Huang, and S. Lucas. Griddly: A platform for ai research in games, 2022.
+[4]M. G. Bellemare, Y . Naddaf, J. Veness, and M. Bowling. The arcade learning environment: An
+evaluation platform for general agents. Journal of Artificial Intelligence Research , 47:253–279,
+June 2013. ISSN 1076-9757. doi: 10.1613/jair.3912. URL http://dx.doi.org/10.1613/
+jair.3912 .
+[5]M. Bettini, R. Kortvelesy, J. Blumenkamp, and A. Prorok. Vmas: A vectorized multi-agent
+simulator for collective robot learning. The 16th International Symposium on Distributed
+Autonomous Robotic Systems , 2022.
+[6] J. Bruce, M. Dennis, A. Edwards, J. Parker-Holder, Y . Shi, E. Hughes, M. Lai, A. Mavalankar,
+R. Steigerwald, C. Apps, Y . Aytar, S. Bechtle, F. Behbahani, S. Chan, N. Heess, L. Gonzalez,
+S. Osindero, S. Ozair, S. Reed, J. Zhang, K. Zolna, J. Clune, N. de Freitas, S. Singh, and
+T. Rocktäschel. Genie: Generative interactive environments, 2024.
+[7]K. Cobbe, C. Hesse, J. Hilton, and J. Schulman. Leveraging procedural generation to benchmark
+reinforcement learning. In International conference on machine learning , pages 2048–2056.
+PMLR, 2020.
+[8]C. S. de Witt, T. Gupta, D. Makoviichuk, V . Makoviychuk, P. H. S. Torr, M. Sun, and S. Whiteson.
+Is independent learning all you need in the starcraft multi-agent challenge?, 2020.
+[9]M. Dennis, N. Jaques, E. Vinitsky, A. Bayen, S. Russell, A. Critch, and S. Levine. Emergent
+complexity and zero-shot transfer via unsupervised environment design, 2021.
+[10] B. Doerschuk-Tiberi and S. Tao. Lux AI Challenge Season 1, 7 2021. URL https://github.
+com/Lux-AI-Challenge/Lux-Design-2021 .
+[11] B. Ellis, J. Cook, S. Moalla, M. Samvelyan, M. Sun, A. Mahajan, J. N. Foerster, and S. Whiteson.
+Smacv2: An improved benchmark for cooperative multi-agent reinforcement learning, 2023.
+[12] L. Espeholt, H. Soyer, R. Munos, K. Simonyan, V . Mnih, T. Ward, Y . Doron, V . Firoiu, T. Harley,
+I. Dunning, S. Legg, and K. Kavukcuoglu. Impala: Scalable distributed deep-rl with importance
+weighted actor-learner architectures, 2018.
+[13] J. Farebrother, M. C. Machado, and M. Bowling. Generalization and regularization in dqn.
+arXiv preprint arXiv:1810.00123 , 2018.
+[14] D. Guo, Q. Zhu, D. Yang, Z. Xie, K. Dong, W. Zhang, G. Chen, X. Bi, Y . Wu, Y . Li, et al.
+Deepseek-coder: When the large language model meets programming–the rise of code intelli-
+gence. arXiv preprint arXiv:2401.14196 , 2024.
+[15] W. H. Guss, M. Y . Castro, S. Devlin, B. Houghton, N. S. Kuno, C. Loomis, S. Milani, S. Mo-
+hanty, K. Nakata, R. Salakhutdinov, et al. The minerl 2020 competition on sample efficient
+reinforcement learning using human priors. arXiv preprint arXiv:2101.11071 , 2021.
+[16] M. Henaff, R. Raileanu, M. Jiang, and T. Rocktäschel. Exploration via elliptical episodic
+bonuses. Advances in Neural Information Processing Systems , 35:37631–37646, 2022.
+[17] M. Hessel, H. Soyer, L. Espeholt, W. Czarnecki, S. Schmitt, and H. van Hasselt. Multi-task
+deep reinforcement learning with popart, 2018.
+[18] S. Hochreiter and J. Schmidhuber. Long short-term memory. Neural computation , 9(8):
+1735–1780, 1997.
+10[19] S. Huang, R. F. J. Dossa, C. Ye, and J. Braga. Cleanrl: High-quality single-file implementations
+of deep reinforcement learning algorithms, 2021.
+[20] M. Jiang, M. Dennis, J. Parker-Holder, J. Foerster, E. Grefenstette, and T. Rocktäschel. Replay-
+guided adversarial environment design. Advances in Neural Information Processing Systems ,
+34:1884–1897, 2021.
+[21] M. Jiang, E. Grefenstette, and T. Rocktäschel. Prioritized level replay. In International
+Conference on Machine Learning , pages 4940–4950. PMLR, 2021.
+[22] M. Jiang, M. Dennis, J. Parker-Holder, A. Lupu, H. Küttler, E. Grefenstette, T. Rocktäschel, and
+J. Foerster. Grounding aleatoric uncertainty for unsupervised environment design. Advances in
+Neural Information Processing Systems , 35:32868–32881, 2022.
+[23] A. Kanervisto, S. Milani, K. Ramanauskas, N. Topin, Z. Lin, J. Li, J. Shi, D. Ye, Q. Fu,
+W. Yang, W. Hong, Z. Huang, H. Chen, G. Zeng, Y . Lin, V . Micheli, E. Alonso, F. Fleuret,
+A. Nikulin, Y . Belousov, O. Svidchenko, and A. Shpilman. Minerl diamond 2021 competition:
+Overview, results, and lessons learned. In D. Kiela, M. Ciccone, and B. Caputo, editors,
+Proceedings of the NeurIPS 2021 Competitions and Demonstrations Track , volume 176 of
+Proceedings of Machine Learning Research , pages 13–28. PMLR, 06–14 Dec 2022. URL
+https://proceedings.mlr.press/v176/kanervisto22a.html .
+[24] I. Kanitscheider, J. Huizinga, D. Farhi, W. H. Guss, B. Houghton, R. Sampedro, P. Zhokhov,
+B. Baker, A. Ecoffet, J. Tang, O. Klimov, and J. Clune. Multi-task curriculum learning in a
+complex, visual, hard-exploration domain: Minecraft, 2021.
+[25] H. Küttler, N. Nardelli, A. H. Miller, R. Raileanu, M. Selvatici, E. Grefenstette, and T. Rock-
+täschel. The nethack learning environment, 2020.
+[26] M. Lechner, L. Yin, T. Seyde, T.-H. Wang, W. Xiao, R. Hasani, J. Rountree, and D. Rus.
+Gigastep - one billion steps per second multi-agent reinforcement learning. In Advances in
+Neural Information Processing Systems , 2023. URL https://openreview.net/forum?id=
+UgPAaEugH3 .
+[27] J. Z. Leibo, E. Duéñez-Guzmán, A. S. Vezhnevets, J. P. Agapiou, P. Sunehag, R. Koster,
+J. Matyas, C. Beattie, I. Mordatch, and T. Graepel. Scalable evaluation of multi-agent reinforce-
+ment learning with melting pot, 2021.
+[28] R. Lowe, Y . Wu, A. Tamar, J. Harb, P. Abbeel, and I. Mordatch. Multi-agent actor-critic for
+mixed cooperative-competitive environments, 2020.
+[29] M. C. Machado, M. G. Bellemare, E. Talvitie, J. Veness, M. Hausknecht, and M. Bowling.
+Revisiting the arcade learning environment: Evaluation protocols and open problems for general
+agents. Journal of Artificial Intelligence Research , 61:523–562, 2018.
+[30] V . Mnih, K. Kavukcuoglu, D. Silver, A. Graves, I. Antonoglou, D. Wierstra, and M. Riedmiller.
+Playing atari with deep reinforcement learning, 2013.
+[31] I. Mordatch and P. Abbeel. Emergence of grounded compositional language in multi-agent
+populations. 2018.
+[32] A. Nikulin, V . Kurenkov, I. Zisman, A. Agarkov, V . Sinii, and S. Kolesnikov. Xland-minigrid:
+Scalable meta-reinforcement learning environments in jax, 2024.
+[33] OpenAI, C. Berner, G. Brockman, B. Chan, V . Cheung, P. D˛ ebiak, C. Dennison, D. Farhi,
+Q. Fischer, S. Hashme, C. Hesse, R. Józefowicz, S. Gray, C. Olsson, J. Pachocki, M. Petrov,
+H. P. de Oliveira Pinto, J. Raiman, T. Salimans, J. Schlatter, J. Schneider, S. Sidor, I. Sutskever,
+J. Tang, F. Wolski, and S. Zhang. Dota 2 with large scale deep reinforcement learning, 2019.
+URLhttps://arxiv.org/abs/1912.06680 .
+[34] A. Petrenko, E. Wijmans, B. Shacklett, and V . Koltun. Megaverse: Simulating embodied agents
+at one million experiences per second, 2021.
+[35] S. Reed, K. Zolna, E. Parisotto, S. G. Colmenarejo, A. Novikov, G. Barth-Maron, M. Gimenez,
+Y . Sulsky, J. Kay, J. T. Springenberg, T. Eccles, J. Bruce, A. Razavi, A. Edwards, N. Heess,
+Y . Chen, R. Hadsell, O. Vinyals, M. Bordbar, and N. de Freitas. A generalist agent, 2022.
+[36] A. Rutherford, B. Ellis, M. Gallici, J. Cook, A. Lupu, G. Ingvarsson, T. Willi, A. Khan, C. S.
+de Witt, A. Souly, S. Bandyopadhyay, M. Samvelyan, M. Jiang, R. T. Lange, S. Whiteson,
+B. Lacerda, N. Hawes, T. Rocktaschel, C. Lu, and J. N. Foerster. Jaxmarl: Multi-agent rl
+environments in jax, 2023.
+11[37] M. Samvelyan, T. Rashid, C. S. de Witt, G. Farquhar, N. Nardelli, T. G. J. Rudner, C.-M. Hung,
+P. H. S. Torr, J. Foerster, and S. Whiteson. The starcraft multi-agent challenge, 2019.
+[38] M. Samvelyan, R. Kirk, V . Kurin, J. Parker-Holder, M. Jiang, E. Hambro, F. Petroni, H. Küt-
+tler, E. Grefenstette, and T. Rocktäschel. Minihack the planet: A sandbox for open-ended
+reinforcement learning research, 2021.
+[39] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov. Proximal policy optimization
+algorithms, 2017.
+[40] J. Suarez, Y . Du, P. Isola, and I. Mordatch. Neural mmo: A massively multiagent game
+environment for training and evaluating intelligent agents. arXiv preprint arXiv:1903.00784 ,
+2019.
+[41] J. Suarez, P. Isola, K. W. Choe, D. Bloomin, H. X. Li, R. Sullivan, N. K. Ravichandran, D. Scott,
+R. S. Shuman, H. Bradley, L. Castricato, K. You, Y . Jiang, Q. Li, J. Chen, and X. Zhu. Neural
+MMO 2.0: A massively multi-task addition to massively multi-agent learning. In Thirty-seventh
+Conference on Neural Information Processing Systems Datasets and Benchmarks Track , 2023.
+URLhttps://openreview.net/forum?id=DSYuRMJnaY .
+[42] S. Tao, I. Pan, B. Doerschuk-Tiberi, and A. Howard. Lux ai season 2, 2023. URL https:
+//kaggle.com/competitions/lux-ai-season-2 .
+[43] A. A. Team, J. Bauer, K. Baumli, S. Baveja, F. Behbahani, A. Bhoopchand, N. Bradley-Schmieg,
+M. Chang, N. Clay, A. Collister, V . Dasagi, L. Gonzalez, K. Gregor, E. Hughes, S. Kashem,
+M. Loks-Thompson, H. Openshaw, J. Parker-Holder, S. Pathak, N. Perez-Nieves, N. Rakicevic,
+T. Rocktäschel, Y . Schroecker, J. Sygnowski, K. Tuyls, S. York, A. Zacherl, and L. Zhang.
+Human-timescale adaptation in an open-ended task space, 2023.
+[44] O. E. L. Team, A. Stooke, A. Mahajan, C. Barros, C. Deck, J. Bauer, J. Sygnowski, M. Trebacz,
+M. Jaderberg, M. Mathieu, N. McAleese, N. Bradley-Schmieg, N. Wong, N. Porcel, R. Raileanu,
+S. Hughes-Fitt, V . Dalibard, and W. M. Czarnecki. Open-ended learning leads to generally
+capable agents, 2021.
+[45] S. Team, M. A. Raad, A. Ahuja, C. Barros, F. Besse, A. Bolt, A. Bolton, B. Brownfield,
+G. Buttimore, M. Cant, S. Chakera, S. C. Y . Chan, J. Clune, A. Collister, V . Copeman, A. Cullum,
+I. Dasgupta, D. de Cesare, J. D. Trapani, Y . Donchev, E. Dunleavy, M. Engelcke, R. Faulkner,
+F. Garcia, C. Gbadamosi, Z. Gong, L. Gonzales, K. Gupta, K. Gregor, A. O. Hallingstad,
+T. Harley, S. Haves, F. Hill, E. Hirst, D. A. Hudson, J. Hudson, S. Hughes-Fitt, D. J. Rezende,
+M. Jasarevic, L. Kampis, R. Ke, T. Keck, J. Kim, O. Knagg, K. Kopparapu, A. Lampinen,
+S. Legg, A. Lerchner, M. Limont, Y . Liu, M. Loks-Thompson, J. Marino, K. M. Cussons,
+L. Matthey, S. Mcloughlin, P. Mendolicchio, H. Merzic, A. Mitenkova, A. Moufarek, V . Oliveira,
+Y . Oliveira, H. Openshaw, R. Pan, A. Pappu, A. Platonov, O. Purkiss, D. Reichert, J. Reid,
+P. H. Richemond, T. Roberts, G. Ruscoe, J. S. Elias, T. Sandars, D. P. Sawyer, T. Scholtes,
+G. Simmons, D. Slater, H. Soyer, H. Strathmann, P. Stys, A. C. Tam, D. Teplyashin, T. Terzi,
+D. Vercelli, B. Vujatovic, M. Wainwright, J. X. Wang, Z. Wang, D. Wierstra, D. Williams,
+N. Wong, S. York, and N. Young. Scaling instructable agents across many simulated worlds,
+2024.
+[46] J. K. Terry, B. Black, N. Grammel, M. Jayakumar, A. Hari, R. Sullivan, L. Santos, R. Perez,
+C. Horsch, C. Dieffendahl, N. L. Williams, Y . Lokesh, and P. Ravi. Pettingzoo: Gym for
+multi-agent reinforcement learning, 2021.
+[47] R. Wang, J. Lehman, J. Clune, and K. O. Stanley. Paired open-ended trailblazer (poet): Endlessly
+generating increasingly complex and diverse learning environments and their solutions, 2019.
+[48] C. Yu, A. Velu, E. Vinitsky, J. Gao, Y . Wang, A. Bayen, and Y . Wu. The surprising effectiveness
+of ppo in cooperative, multi-agent games, 2022.
+Checklist
+1. For all authors...
+(a)Do the main claims made in the abstract and introduction accurately reflect the pa-
+per’s contributions and scope? [Yes] We introduce Meta MMO’s minigames, speed
+improvement, and generalist policy. These are freely available for download.
+12(b)Did you describe the limitations of your work? [Yes] See Section 5, where we describe
+three shortcomings.
+(c)Did you discuss any potential negative societal impacts of your work? [Yes] See
+Section 5. Minigames are simulated games that are substantially abstracted from
+real-world scenarios.
+(d)Have you read the ethics review guidelines and ensured that your paper conforms to
+them? [Yes] This paper conforms to the ethics review guidelines.
+2. If you are including theoretical results...
+(a) Did you state the full set of assumptions of all theoretical results? [N/A]
+(b) Did you include complete proofs of all theoretical results? [N/A]
+3. If you ran experiments (e.g. for benchmarks)...
+(a)Did you include the code, data, and instructions needed to reproduce the main experi-
+mental results (either in the supplemental material or as a URL)? [Yes] The repository
+url,https://github.com/kywch/meta-mmo , is mentioned in both the Introduction
+and Appendix.
+(b)Did you specify all the training details (e.g., data splits, hyperparameters, how they
+were chosen)? [Yes] We specified these in detail in Appendix A.5.
+(c)Did you report error bars (e.g., with respect to the random seed after running experi-
+ments multiple times)? [Yes] The training curves in Figs 3 and 5 were generated with
+five random seeds, and the error bars were presented accordingly.
+(d)Did you include the total amount of compute and the type of resources used (e.g.,
+type of GPUs, internal cluster, or cloud provider)? [Yes] We summarized the training
+duration and included links to the wandbs in Table 2. The hardware configuration (RTX
+4090) is described in Appendix A.5.
+4. If you are using existing assets (e.g., code, data, models) or curating/releasing new assets...
+(a)If your work uses existing assets, did you cite the creators? [Yes] This work is based on
+Neural MMO 2 and CleanRL, both cited in this paper, and PufferLib, which is currently
+unpublished.
+(b)Did you mention the license of the assets? [Yes] Everything is published under the MIT
+license.
+(c)Did you include any new assets either in the supplemental material or as a URL?
+[Yes] The updates made to Neural MMO 2 have been merged into the Neural MMO
+repository and are now freely available.
+(d)Did you discuss whether and how consent was obtained from people whose data you’re
+using/curating? [N/A] This work does not have human data.
+(e)Did you discuss whether the data you are using/curating contains personally identifi-
+able information or offensive content? [N/A] This work does not contain personally
+identifiable information or offensive content.
+5. If you used crowdsourcing or conducted research with human subjects...
+(a)Did you include the full text of instructions given to participants and screenshots, if
+applicable? [N/A]
+(b)Did you describe any potential participant risks, with links to Institutional Review
+Board (IRB) approvals, if applicable? [N/A]
+(c)Did you include the estimated hourly wage paid to participants and the total amount
+spent on participant compensation? [N/A]
+13A Appendix
+The Meta MMO baselines, training, and evaluation code are available at https://github.
+com/kywch/meta-mmo . The Meta MMO environment is available at https://github.com/
+NeuralMMO/environment/tree/2.1 , as Neural MMO 2.1. Both are published under the MIT
+license. The authors confirm that they have the permission to license these as such and bear all
+responsibility in the case of violation of rights.
+Hosting and Maintenance : The code, documentation, and baselines will continue to be hosted on the
+Neural MMO GitHub account, as they were for the last five years. Support is available on the Neural
+MMO Discord, available from https://neuralmmo.github.io/ . We will continue to update the
+platform to resolve major breaking changes.
+Reproducibility : We provide the training and evaluation scripts to reproduce the results in the
+repository. These may be used as baselines by future works.
+A.1 Meta MMO Subsystems and Configurable Attributes
+Meta MMO’s minigame framework allows a single policy to be trained on multiple minigames
+simultaneously, even when they have different observation and action spaces. For example, Race to
+the Center is a free-for-all minigame without observations or actions related to combat, items, or
+the market, while Team Battle is a team-based minigame that includes these features. To facilitate
+concurrent training on the minigames with different observation and action spaces, the environment
+is initialized with a superset of observations and actions that encompass all minigames, and each
+subsystem can be turned on and off during reset. During training, the appropriate observations and
+actions are used based on the current minigame, allowing the policy to learn from diverse game
+configurations seamlessly. This feature enables researchers to easily train generalist agents out of the
+box and investigate the impact of diverse curricula on generalist learning.
+Table A1: Neural MMO subsystems and associated observation/action spaces.
+Subsystem Obs space Action space
+BaseTick (1), AgentId (1), Task (27),
+Tile (225x7), Entity (100x31)Move (5)
+Terrain . .
+Resource . .
+Combat . Attack style (3), target (101)
+NPC . .
+Communication Comm (32x4) Comm token (127)
+Item Inventory (12x16)Use (13), Destroy (13),
+Give item (13), target (101)
+Equipment . Use acts as equip and unequip
+Profession . .
+Progression . .
+Exchange Market (384x16)Sell item (13), price (99), Buy (385),
+GiveGold target (101), amount (99)
+The sections below list the configurable attributes in each subsystem.
+Base: The base attributes that do not belong to any subsystems.
+• HORIZON: Number of steps before the environment resets.
+•ALLOW_MOVE_INTO_OCCUPIED_TILE: Whether agents can move into occupied tiles.
+• PLAYER_VISION_RADIUS: Number of visible tiles in any direction.
+• PLAYER_HEALTH_INCREMENT: Health increment per tick for players.
+• DEATH_FOG_ONSET: Ticks before spawning death fog, None for no fog.
+• DEATH_FOG_SPEED: Tiles per tick the fog moves.
+14• DEATH_FOG_FINAL_SIZE: Fog radius from center.
+• MAP_CENTER: Playable map size in tiles per side.
+• MAP_RESET_FROM_FRACTAL: Whether to regenerate map from fractal.
+Terrain: Procedurally generate maps.
+• TERRAIN_FLIP_SEED: Whether to negate the seed used for terrain generation.
+• TERRAIN_FREQUENCY: Base noise frequency range for terrain generation.
+• TERRAIN_FREQUENCY_OFFSET: Noise frequency octave offset for terrain generation.
+• TERRAIN_LOG_INTERPOLATE_MIN: Min interpolation log-strength for noise freqs.
+• TERRAIN_LOG_INTERPOLATE_MAX: Max interpolation log-strength for noise freqs.
+•TERRAIN_TILES_PER_OCTA VE: Number of octaves sampled from log2 spaced TER-
+RAIN_FREQUENCY range.
+• TERRAIN_VOID: Noise threshold for void generation.
+• TERRAIN_WATER: Noise threshold for water generation.
+• TERRAIN_GRASS: Noise threshold for grass generation.
+• TERRAIN_FOILAGE: Noise threshold for foilage (food tile) generation.
+•TERRAIN_RESET_TO_GRASS: Make all tiles grass when resetting from the fractal noise.
+• TERRAIN_DISABLE_STONE: Whether to disable stone (obstacle) tiles.
+•TERRAIN_SCATTER_EXTRA_RESOURCES: Scatter extra food and water on the map
+when resetting from the fractal noise.
+Resource: Add food and water foraging to maintain agent health. Requires Terrain.
+• RESOURCE_BASE: Initial level and capacity for food and water.
+• RESOURCE_DEPLETION_RATE: Depletion rate for food and water.
+• RESOURCE_STARV ATION_RATE: Damage per tick without food.
+• RESOURCE_DEHYDRATION_RATE: Damage per tick without water.
+• RESOURCE_RESILIENT_POPULATION: Proportion resilient to starvation/dehydration.
+• RESOURCE_DAMAGE_REDUCTION: Damage reduction for resilient agents.
+• RESOURCE_FOILAGE_CAPACITY: Maximum foilage tile harvests before decay.
+• RESOURCE_FOILAGE_RESPAWN: Probability harvested foilage regenerates per tick.
+•RESOURCE_HARVEST_RESTORE_FRACTION: Fraction of maximum capacity restored
+on harvest.
+•RESOURCE_HEALTH_REGEN_THRESHOLD: Resource capacity fraction required to
+regen health.
+•RESOURCE_HEALTH_RESTORE_FRACTION: Health fraction restored when above
+threshold.
+Combat: Allow agents to fight other agents and NPCs with Melee, Range, and Magic.
+• COMBAT_SPAWN_IMMUNITY: Ticks before new agents can be attacked.
+• COMBAT_ALLOW_FLEXIBLE_STYLE: Whether agents can attack with any style.
+• COMBAT_STATUS_DURATION: Ticks combat status lasts after event.
+• COMBAT_WEAKNESS_MULTIPLIER: Multiplier for super-effective attacks.
+•COMBAT_MINIMUM_DAMAGE_PROPORTION: Minimum damage proportion to inflict.
+• COMBAT_DAMAGE_FORMULA: Damage formula for combat.
+• COMBAT_MELEE_DAMAGE: Melee attack damage.
+• COMBAT_MELEE_REACH: Reach of attacks using the Melee skill.
+15• COMBAT_RANGE_DAMAGE: Range attack damage.
+• COMBAT_RANGE_REACH: Reach of attacks using the Range skill.
+• COMBAT_MAGE_DAMAGE: Mage attack damage.
+• COMBAT_MAGE_REACH: Reach of attacks using the Mage skill.
+NPC: Add Non-Playable Characters of varying hostility. Requires Combat.
+• NPC_N: Maximum number of NPCs spawnable in the environment.
+• NPC_DEFAULT_REFILL_DEAD_NPCS: Whether to refill dead NPCs.
+• NPC_SPAWN_ATTEMPTS: Number of NPC spawn attempts per tick.
+• NPC_SPAWN_AGGRESSIVE: Percentage distance threshold for aggressive NPCs.
+• NPC_SPAWN_NEUTRAL: Percentage distance threshold from spawn for neutral NPCs.
+• NPC_SPAWN_PASSIVE: Percentage distance threshold from spawn for passive NPCs.
+• NPC_LEVEL_MIN: Minimum NPC level.
+• NPC_LEVEL_MAX: Maximum NPC level.
+• NPC_BASE_DEFENSE: Base NPC defense.
+• NPC_LEVEL_DEFENSE: Bonus NPC defense per level.
+• NPC_BASE_DAMAGE: Base NPC damage.
+• NPC_LEVEL_DAMAGE: Bonus NPC damage per level.
+• NPC_LEVEL_MULTIPLIER: Multiplier for NPC level damage and defense.
+• NPC_ALLOW_ATTACK_OTHER_NPCS: Whether NPCs can attack other NPCs.
+Communication: Add limited-bandwidth team messaging obs and action.
+• COMMUNICATION_N_OBS: Number of same-team players sharing obs.
+• COMMUNICATION_NUM_TOKENS: Number of distinct COMM tokens.
+Item: Add inventory and item-related actions.
+• ITEM_N: Number of unique base item classes.
+• ITEM_INVENTORY_CAPACITY: Number of inventory spaces.
+• ITEM_ALLOW_GIFT: Whether agents can give gold/item to each other.
+• INVENTORY_N_OBS: Number of distinct item observations.
+Equipment: Add armor, ammunition, and weapons to increase agents’ offensive and defensive
+capabilities. Requires Item.
+• WEAPON_DROP_PROB: Chance of getting a weapon while harvesting ammunition.
+• EQUIPMENT_WEAPON_BASE_DAMAGE: Base weapon damage.
+• EQUIPMENT_WEAPON_LEVEL_DAMAGE: Added weapon damage per level.
+• EQUIPMENT_AMMUNITION_BASE_DAMAGE: Base ammunition damage.
+•EQUIPMENT_AMMUNITION_LEVEL_DAMAGE: Added ammunition damage per level.
+• EQUIPMENT_TOOL_BASE_DEFENSE: Base tool defense.
+• EQUIPMENT_TOOL_LEVEL_DEFENSE: Added tool defense per level.
+• EQUIPMENT_ARMOR_BASE_DEFENSE: Base armor defense.
+• EQUIPMENT_ARMOR_LEVEL_DEFENSE: Base equipment defense.
+Profession: Add resources and tools to practice Herbalism, Fishing, Prospecting, Carving, and
+Alchemy. Requires Terrain and Item.
+• PROFESSION_TREE_CAPACITY: Maximum tree tile harvests before decay.
+16• PROFESSION_TREE_RESPAWN: Probability harvested tree regenerates per tick.
+• PROFESSION_ORE_CAPACITY: Maximum ore tile harvests before decay.
+• PROFESSION_ORE_RESPAWN: Probability harvested ore regenerates per tick.
+• PROFESSION_CRYSTAL_CAPACITY: Maximum crystal tile harvests before decay.
+• PROFESSION_CRYSTAL_RESPAWN: Probability harvested crystal regenerates per tick.
+• PROFESSION_HERB_CAPACITY: Maximum herb tile harvests before decay.
+• PROFESSION_HERB_RESPAWN: Probability harvested herb regenerates per tick.
+• PROFESSION_FISH_CAPACITY: Maximum fish tile harvests before decay.
+• PROFESSION_FISH_RESPAWN: Probability harvested fish regenerates per tick.
+• PROFESSION_CONSUMABLE_RESTORE: Food/water restored by consuming item.
+Progression: Add levels to skills, items, and equipment to increase agents’ and item attributes.
+• PROGRESSION_BASE_LEVEL: Initial skill level.
+• PROGRESSION_LEVEL_MAX: Max skill level.
+• PROGRESSION_EXP_THRESHOLD: Experience thresholds for each level.
+• PROGRESSION_COMBAT_XP_SCALE: Add XP for Melee/Range/Mage attacks.
+• PROGRESSION_AMMUNITION_XP_SCALE: XP for Prospecting/Carving/Alchemy.
+• PROGRESSION_CONSUMABLE_XP_SCALE: Add XP for Fishing/Herbalism harvests.
+• PROGRESSION_MELEE_BASE_DAMAGE: Base Melee attack damage.
+• PROGRESSION_MELEE_LEVEL_DAMAGE: Bonus Melee damage per level.
+• PROGRESSION_RANGE_BASE_DAMAGE: Base Range attack damage.
+• PROGRESSION_RANGE_LEVEL_DAMAGE: Bonus Range damage per level.
+• PROGRESSION_MAGE_BASE_DAMAGE: Base Mage attack damage.
+• PROGRESSION_MAGE_LEVEL_DAMAGE: Bonus Mage damage per level.
+• PROGRESSION_BASE_DEFENSE: Base defense.
+• PROGRESSION_LEVEL_DEFENSE: Bonus defense per level.
+Exchange: Add gold and market actions to enable trading items and equipment with other agents on
+a global market. Requires Item.
+• EXCHANGE_BASE_GOLD: Initial gold amount.
+• EXCHANGE_LISTING_DURATION: Ticks item is listed for sale.
+• MARKET_N_OBS: Number of distinct item observations.
+• PRICE_N_OBS: Number of distinct price observations and max price.
+17A.2 Adaptive Difficulty and Domain Randomization Examples
+The code snippets below are excerpts from https://github.com/kywch/meta-mmo/blob/main/
+reinforcement_learning/environment.py .
+Adaptive Difficulty . During reset, the _set_config() function can override the default config
+values. Thus, it is possible for a minigame to look at the history of game results and adjust the config
+for the next episode. The following is an excerpt from Race to the Center, where the difficulty is
+determined by the map size.
+class RacetoCenter(Game):
+def _set_config(self):
+self.config.reset()
+...
+self._determine_difficulty() # sets the map_size
+self.config.set_for_episode("MAP_CENTER", self.map_size)
+def _determine_difficulty(self):
+# Determine the difficulty (the map size) based on the previous results
+if self.adaptive_difficulty and self.history \
+and self.history[-1]["result"]: # the last game was won
+last_results = [r["result"] for r in self.history if r["map_size"] == self.map_size]
+if sum(last_results) >= self.num_game_won \
+and self.map_size <= self.config.original["MAP_CENTER"] - self.step_size:
+self._map_size += self.step_size
+Domain Randomization can also be achieved using the _set_config() function. To maintain
+determinism, use the environment’s random number generator, self._np_random .
+class Survive(ng.DefaultGame):
+def _set_config(self):
+self.config.reset()
+...
+fog_onset = self._next_fog_onset or self._np_random.integers(32, 256)
+fog_speed = self._next_fog_speed or 1 / self._np_random.integers(7, 12)
+self.config.set_for_episode("DEATH_FOG_ONSET", fog_onset)
+self.config.set_for_episode("DEATH_FOG_SPEED", fog_speed)
+npc_num = self._next_num_npc or self._np_random.integers(64, 256)
+self.config.set_for_episode("NPC_N", npc_num)
+18A.3 Minigame Replays
+Full Config Minigames
+• Survival
+• Team Battle
+• Multi-task Training
+Mini Config Minigames
+• Team Battle
+• Protect the King
+• Race to the Center
+• King of the Hill
+• Sandwich
+Making New Replays can be done using the scripts and policies provided in the base-
+lines. The checkpoints should be copied or symlinked into a directory; in the baseline reposi-
+tory, each experiment folder contains four specialist and four generalist checkpoints. Running
+python train.py -m replay generates a replay. The -pargument specifies the directory con-
+taining the policies, and the -gargument specifies the minigames to run. The –train.seed
+argument can be used to specify a random seed.
+# Full config experiments
+$ python train.py -m replay -p experiments/full_sv -g survive
+$ python train.py -m replay -p experiments/full_mt -g task
+$ python train.py -m replay -p experiments/full_tb -g battle --train.seed 11
+# Mini config experiments need --use-mini flag
+$ python train.py -m replay --use-mini -p experiments/mini_tb -g battle
+$ python train.py -m replay --use-mini -p experiments/mini_pk -g ptk
+$ python train.py -m replay --use-mini -p experiments/mini_rc -g race
+$ python train.py -m replay --use-mini -p experiments/mini_kh -g koh
+$ python train.py -m replay --use-mini -p experiments/mini_sw -g sandwich
+19A.4 Multi-task Training and Evaluation Tasks
+The full training and evaluation tasks are available in the baseline repository: https://github.com/
+kywch/meta-mmo/blob/main/curriculum/neurips_curriculum.py . The evaluation tasks are
+tagged with tags=["eval"] .
+There are 63 evaluation tasks across six categories. The task progress metric is obtained by averaging
+all the maximum progress from each task. To calculate a normalized score (max 100), each category
+is assigned a weight of 100/6, and within each category, the maximum progress across all tasks was
+averaged to determine the category score.
+Survival:
+• TickGE: num_tick = 1024
+Combat:
+• CountEvent: PLAYER_KILL n=20
+• DefeatEntity: type=npc, level=1+, n=20
+• DefeatEntity: type=npc, level=3+, n=20
+Exploration:
+• CountEvent: GO_FARTHEST n=64
+• OccupyTile: row=80, col=80
+Skill:
+• AttainSkill: skill=Melee, level=10
+• AttainSkill: skill=Mage, level=10
+• AttainSkill: skill=Range, level=10
+• AttainSkill: skill=Fishing, level=10
+• AttainSkill: skill=Herbalism, level=10
+• AttainSkill: skill=Prospecting, level=10
+• AttainSkill: skill=Alchemy, level=10
+• AttainSkill: skill=Carving, level=10
+Item:
+• HavestItem: item=Whetstone, level=1+, n=20
+• HavestItem: item=Arrow, level=1+, n=20
+• HavestItem: item=Runes, level=1+, n=20
+• HavestItem: item=Whetstone, level=3+, n=20
+• HavestItem: item=Arrow, level=3+, n=20
+• HavestItem: item=Runes, level=3+, n=20
+• ConsumeItem: item=Ration, level=1+, n=20
+• ConsumeItem: item=Potion, level=1+, n=20
+• ConsumeItem: item=Ration, level=3+, n=20
+• ConsumeItem: item=Potion, level=3+, n=20
+• EquipItem: item=Hat, level=1+, n=1
+• EquipItem: item=Top, level=1+, n=1
+• EquipItem: item=Bottom, level=1+, n=1
+• EquipItem: item=Spear, level=1+, n=1
+20• EquipItem: item=Bow, level=1+, n=1
+• EquipItem: item=Wand, level=1+, n=1
+• EquipItem: item=Axe, level=1+, n=1
+• EquipItem: item=Gloves, level=1+, n=1
+• EquipItem: item=Rod, level=1+, n=1
+• EquipItem: item=Pickaxe, level=1+, n=1
+• EquipItem: item=Chisel, level=1+, n=1
+• EquipItem: item=Whetstone, level=1+, n=1
+• EquipItem: item=Arrow, level=1+, n=1
+• EquipItem: item=Runes, level=1+, n=1
+• EquipItem: item=Hat, level=3+, n=1
+• EquipItem: item=Top, level=3+, n=1
+• EquipItem: item=Bottom, level=3+, n=1
+• EquipItem: item=Spear, level=3+, n=1
+• EquipItem: item=Bow, level=3+, n=1
+• EquipItem: item=Wand, level=3+, n=1
+• EquipItem: item=Axe, level=3+, n=1
+• EquipItem: item=Gloves, level=3+, n=1
+• EquipItem: item=Rod, level=3+, n=1
+• EquipItem: item=Pickaxe, level=3+, n=1
+• EquipItem: item=Chisel, level=3+, n=1
+• EquipItem: item=Whetstone, level=3+, n=1
+• EquipItem: item=Arrow, level=3+, n=1
+• EquipItem: item=Runes, level=3+, n=1
+• FullyArmed: skill=Melee, level=1+, n=1
+• FullyArmed: skill=Mage, level=1+, n=1
+• FullyArmed: skill=Range, level=1+, n=1
+• FullyArmed: skill=Melee, level=3+, n=1
+• FullyArmed: skill=Mage, level=3+, n=1
+• FullyArmed: skill=Range, level=3+, n=1
+Market:
+• CountEvent: EARN_GOLD n=20
+• CountEvent: BUY_ITEM n=20
+• EarnGold: amount=100
+• HoardGold: amount=100
+• MakeProfit: amount=100
+21A.5 Experimental Details
+A.5.1 Hardware Configuration
+The training sessions presented in Table 2 were conducted using a consumer-grade desktop with an
+i9-13900K CPU, 128GB RAM, and a single RTX 4090 GPU, totaling around $4,000 USD retail.
+A.5.2 Experiment Configs: Mini and Full
+The code snippets below are excerpts from https://github.com/kywch/meta-mmo/blob/main/
+reinforcement_learning/environment.py .
+Mini Config: Below are the details of the subsystems and configurations used in the Mini Config
+experiment. The default values used in the baseline repository are included as comments. The size of
+observation space is 5,068.
+import nmmo.core.config as nc
+class MiniGameConfig(
+nc.Medium,
+nc.Terrain,
+nc.Resource,
+nc.Combat,
+nc.NPC,
+nc.Communication,
+):
+def __init__(self, env_args: Namespace):
+super().__init__()
+self.set("PROVIDE_ACTION_TARGETS", True)
+self.set("PROVIDE_NOOP_ACTION_TARGET", True)
+self.set("PROVIDE_DEATH_FOG_OBS", True)
+self.set("TASK_EMBED_DIM", 16)
+self.set("MAP_FORCE_GENERATION", env_args.map_force_generation) # False
+self.set("PLAYER_N", env_args.num_agents) # 128
+self.set("HORIZON", env_args.max_episode_length) # 1024
+self.set("MAP_N", env_args.num_maps) # 256
+# num_agent_per_team = 8, but minigames can override the below
+self.set("TEAMS", get_team_dict(env_args.num_agents, env_args.num_agents_per_team))
+self.set("PATH_MAPS", f"{env_args.maps_path}/{env_args.map_size}/") # "maps/train/"
+self.set("MAP_CENTER", env_args.map_size) # 128
+self.set("RESOURCE_RESILIENT_POPULATION", env_args.resilient_population) # 0
+self.set("COMBAT_SPAWN_IMMUNITY", env_args.spawn_immunity) # 20
+# The default is "curriculum/neurips_curriculum_with_embedding.pkl"
+self.set("CURRICULUM_FILE_PATH", env_args.curriculum_file_path)
+# Make the high-level npcs weaker. Huge impact on the difficulty
+self.set("NPC_LEVEL_MULTIPLIER", 0.5)
+22Full Config: Below are the details of the subsystems and configurations used in the Full Config
+experiment. The full config adds Progression, Item, Equipment, Profession, and Exchange subsystems
+to the mini config. The size of observation space is 12,241.
+class FullGameConfig(
+MiniGameConfig,
+nc.Progression,
+nc.Item,
+nc.Equipment,
+nc.Profession,
+nc.Exchange,
+):
+pass
+Curriculum Learning with Minigames
+When training a generalist, each minigame is sampled with equal probability during reset. The code
+snippet below shows how the current baseline implements a simple curriculum learning method.
+def make_env_creator(
+reward_wrapper_cls: BaseParallelWrapper,
+train_flag: str = None,
+use_mini: bool = False,
+):
+if train_flag is None or train_flag == "full_gen":
+game_packs = [
+(Survive, 1),
+(TeamBattle, 1),
+(MultiTaskTraining, 1),
+]
+elif train_flag == "sv_only":
+game_packs = [(Survive, 1)]
+...
+elif train_flag == "mini_gen":
+game_packs = [
+(TeamBattle, 1),
+(ProtectTheKing, 1),
+(RacetoCenter, 1),
+(KingoftheHill, 1),
+(Sandwich, 1),
+]
+def env_creator(*args, **kwargs):
+if use_mini is True:
+config = MiniGameConfig(kwargs["env"])
+else:
+config = FullGameConfig(kwargs["env"])
+config.set("GAME_PACKS", game_packs)
+env = nmmo.Env(config)
+env = reward_wrapper_cls(env, **kwargs["reward_wrapper"])
+env = pufferlib.emulation.PettingZooPufferEnv(env)
+return env
+return env_creator
+23A.5.3 Baseline Components
+StatWrapper: This wrapper subclasses Pettingzoo [ 46]’s BaseParallelWrapper and handles the
+training metrics logged to Weights & Biases. The main metrics tracked are the total agent steps (sum
+of all agents’ lifespans in an episode) and the normalized progress toward the center (0 at the edge, 1
+at the center, averaged across agents). Progressing toward the center is crucial in Neural MMO since
+higher-level NPCs and items are concentrated there. Additional game-specific metrics include the
+proportion of agents that performed various events (e.g., eating food, drinking water, scoring hits,
+killing players, firing ammunition, consuming items, etc.), and agent achievements such as maximum
+skill levels, item levels, kill counts, and the number of unique events.
+TeamWrapper: Subclassing the StatWrapper, this component handles team-related observation
+augmentation and manual action overriding, as described in Section 2.3. It also augments the task
+observation with a team game flag, agent game flag, and on/off flags for each subsystem.
+RewardWrapper: Subclassing the TeamWrapper, this wrapper implements custom reward shaping
+based on factors like agent health, experience, attack and defense capabilities, and gold, in addition
+to the task reward. Team-level reward shaping like Team Spirit [33] could be incorporated here.
+Task Embedding: To condition agents during training and evaluation, each agent receives a task
+embedding vector consisting of 27 floats: 11 one-hot encodings for agent/team game and subsys-
+tem enablement, and 16 floats for the task embedding itself. For minigames, task embeddings are
+created by taking the SHA-256 hash of the reward function’s source code. For Multi-task Train-
+ing and Evaluation, task embeddings are generated by (1) prompting a coding language model
+(DeepSeek-Coder-1.3b-Instruct [ 14]) with the reward function’s source code and provided kwargs,
+and (2) reducing the resulting 2048-dimensional vector to 16 dimensions using principal component
+analysis. We recognize the importance of task embeddings for steering generalist agents and highlight
+opportunities for improvement in this area.
+A.5.4 Training Scripts
+Mini Config Experiment :–use-mini sets the mini config mode. The -targument is used to
+specify the minigames for training. The default training steps are 100M for specialists, and the
+generalist policy was trained for 400M steps.
+# Train specialists for Team Battle (tb), Protect the King (pk),
+# Race to the Center (rc), King of the Hill (kh), and Sandwich (sw)
+$ python train.py --use-mini -t tb_only
+$ python train.py --use-mini -t pk_only
+$ python train.py --use-mini -t rc_only
+$ python train.py --use-mini -t kh_only
+$ python train.py --use-mini -t sw_only
+# Train a generalist for playing all five games
+$ python train.py --use-mini -t mini_gen --train.total-timesteps 400_000_000
+Full Config Experiment : Running the script without –use-mini sets up the full config and policy.
+# Train specialists for Survive (sv), Team Battle (tb), Multi-task Training (mt)
+$ python train.py -t sv_only
+$ python train.py -t tb_only
+$ python train.py -t mt_only
+# Train a generalist for playing all three games
+$ python train.py -t full_gen --train.total-timesteps 400_000_000
+24A.5.5 Training Hyperparameters
+Pufferlib 0.7.3 was used for training. These values can be found at https://github.com/kywch/
+meta-mmo/blob/main/config.yaml .
+PPO parameters
+learning_rate 1.0e-4
+anneal_lr True
+gamma 0.99
+gae_lambda 0.95
+norm_adv True
+clip_coef 0.1
+clip_vloss True
+ent_coef 0.01
+vf_coef 0.5
+vf_clip_coef 0.1
+max_grad_norm 0.5
+batch_size 32768
+batch_rows 128
+bptt_horizon 8
+update_epochs 2
+Vec-env parameters
+env_pool True
+num_envs 15
+envs_per_worker 1
+envs_per_batch 6
+Historic self-play parameters
+pool_kernel [0] * 112 + [1]*16
+25A.6 Model architectures
+The source code of the policy is at https://github.com/kywch/meta-mmo/blob/main/agent_
+zoo/baseline/policy.py .
+Mini Config model consists of three encoders (TileEncoder, PlayerEncoder, and TaskEncoder),
+fully-connected layers to the hidden layer (256 units), 1 layer of LSTM, an action decoder, and a
+value network. The number of parameters is 1.74M.
+RecurrentPolicy(
+(policy): Recurrent(
+(policy): Policy(
+(tile_encoder): TileEncoder(
+(type_embedding): Embedding(16, 30)
+(entity_embedding): Embedding(8, 15)
+(rally_embedding): Embedding(8, 15)
+(tile_resnet): ResnetBlock(
+(model): Sequential(
+(0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+(1): LayerNorm((64, 15, 15), eps=1e-05, elementwise_affine=True)
+(2): ReLU()
+(3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+(4): LayerNorm((64, 15, 15), eps=1e-05, elementwise_affine=True)
+)
+)
+(tile_conv_1): Conv2d(64, 32, kernel_size=(3, 3), stride=(1, 1))
+(tile_conv_2): Conv2d(32, 8, kernel_size=(3, 3), stride=(1, 1))
+(tile_fc): Linear(in_features=968, out_features=256, bias=True)
+(tile_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(player_encoder): PlayerEncoder(
+(embedding): Embedding(7936, 32)
+(id_embedding): Embedding(512, 64)
+(agent_mlp): MLPBlock(
+(model): Sequential(
+(0): Linear(in_features=93, out_features=256, bias=True)
+(1): ReLU()
+(2): Linear(in_features=256, out_features=256, bias=True)
+)
+)
+(agent_fc): Linear(in_features=256, out_features=256, bias=True)
+(my_agent_fc): Linear(in_features=256, out_features=256, bias=True)
+(agent_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+(my_agent_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(task_encoder): TaskEncoder(
+(fc): Linear(in_features=27, out_features=256, bias=True)
+(norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(proj_fc): Linear(in_features=768, out_features=256, bias=True)
+(action_decoder): ActionDecoder(
+(layers): ModuleDict(
+(attack_style): Linear(in_features=256, out_features=3, bias=True)
+(attack_target): Linear(in_features=256, out_features=256, bias=True)
+(comm_token): Linear(in_features=256, out_features=127, bias=True)
+(move): Linear(in_features=256, out_features=5, bias=True)
+)
+)
+(value_head): Linear(in_features=256, out_features=1, bias=True)
+)
+(recurrent): LSTM(256, 256)
+)
+)
+26Full Config model : ItemEncoder and MarketEncoder were added to the Mini Config model, and the
+action decoder supports the full action space. The number of parameters is 3.33M.
+RecurrentPolicy(
+(policy): Recurrent(
+(policy): Policy(
+(tile_encoder): TileEncoder(
+(type_embedding): Embedding(16, 30)
+(entity_embedding): Embedding(8, 15)
+(rally_embedding): Embedding(8, 15)
+(tile_resnet): ResnetBlock(
+(model): Sequential(
+(0): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+(1): LayerNorm((64, 15, 15), eps=1e-05, elementwise_affine=True)
+(2): ReLU()
+(3): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+(4): LayerNorm((64, 15, 15), eps=1e-05, elementwise_affine=True)
+)
+)
+(tile_conv_1): Conv2d(64, 32, kernel_size=(3, 3), stride=(1, 1))
+(tile_conv_2): Conv2d(32, 8, kernel_size=(3, 3), stride=(1, 1))
+(tile_fc): Linear(in_features=968, out_features=256, bias=True)
+(tile_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(player_encoder): PlayerEncoder(
+(embedding): Embedding(7936, 32)
+(id_embedding): Embedding(512, 64)
+(agent_mlp): MLPBlock(
+(model): Sequential(
+(0): Linear(in_features=93, out_features=256, bias=True)
+(1): ReLU()
+(2): Linear(in_features=256, out_features=256, bias=True)
+)
+)
+(agent_fc): Linear(in_features=256, out_features=256, bias=True)
+(my_agent_fc): Linear(in_features=256, out_features=256, bias=True)
+(agent_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+(my_agent_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(task_encoder): TaskEncoder(
+(fc): Linear(in_features=27, out_features=256, bias=True)
+(norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(item_encoder): ItemEncoder(
+(embedding): Embedding(256, 32)
+(item_mlp): MLPBlock(
+(model): Sequential(
+(0): Linear(in_features=76, out_features=256, bias=True)
+(1): ReLU()
+(2): Linear(in_features=256, out_features=256, bias=True)
+)
+)
+(item_norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(inventory_encoder): InventoryEncoder(
+(fc): Linear(in_features=3072, out_features=256, bias=True)
+(norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(market_encoder): MarketEncoder(
+(fc): Linear(in_features=256, out_features=256, bias=True)
+(norm): LayerNorm((256,), eps=1e-05, elementwise_affine=True)
+)
+(proj_fc): Linear(in_features=1280, out_features=256, bias=True)
+(action_decoder): ActionDecoder(
+(layers): ModuleDict(
+27(attack_style): Linear(in_features=256, out_features=3, bias=True)
+(attack_target): Linear(in_features=256, out_features=256, bias=True)
+(market_buy): Linear(in_features=256, out_features=256, bias=True)
+(comm_token): Linear(in_features=256, out_features=127, bias=True)
+(inventory_destroy): Linear(in_features=256, out_features=256, bias=True)
+(inventory_give_item): Linear(in_features=256, out_features=256, bias=True)
+(inventory_give_player): Linear(in_features=256, out_features=256, bias=True)
+(gold_quantity): Linear(in_features=256, out_features=99, bias=True)
+(gold_target): Linear(in_features=256, out_features=256, bias=True)
+(move): Linear(in_features=256, out_features=5, bias=True)
+(inventory_sell): Linear(in_features=256, out_features=256, bias=True)
+(inventory_price): Linear(in_features=256, out_features=99, bias=True)
+(inventory_use): Linear(in_features=256, out_features=256, bias=True)
+)
+)
+(value_head): Linear(in_features=256, out_features=1, bias=True)
+)
+(recurrent): LSTM(256, 256)
+)
+)
+28A.7 Evaluation Metrics
+The performance of an agent or policy in multiagent settings is relative to other agents or policies
+in the environment. In our baseline repository, we include trained policy checkpoints at different
+training steps, along with scripts for evaluating policies in a "checkpoint vs. checkpoint" manner.
+Elo Rating : Elo ratings can be used for all minigames involving multiple checkpoints. The game
+score for each checkpoint in an episode is calculated by averaging the maximum task progress of the
+agents controlled by that checkpoint, and then adding a large bonus to the winning agent or team
+to mark the winner. The evaluation script ( evaluate.py ) runs 200 episodes with a random seed
+and saves the game scores in a JSON file. We used 10 random seeds, resulting in 2000 episodes for
+evaluation. The Elo script ( proc_elo.py ) converts these result files with game scores into pairwise
+win-loss records for each checkpoint pair (e.g., for four checkpoints, six win-loss pairs are created)
+and calculates the corresponding Elo ratings.
+Task Completion : For the multi-task evaluation setting, which implements the 2023 multi-task
+completion challenge, the 63 evaluation tasks are randomly assigned to each agent, which may be
+controlled by different checkpoints. The evaluation script ( evaluate.py ) runs 200 episodes with
+a random seed and saves the task progress in a JSON file. We used 10 random seeds, resulting in
+2000 episodes for evaluation. The scoring script ( proc_task_eval.py ) aggregates the progress
+for each checkpoint, printing the average lifespan, average task completion rate across the 63 tasks,
+and a score normalized across six categories: survival, combat, exploration, skill, item, and market.
+Evaluation Scripts : Theevaluate.py script runs the evaluation. A directory with checkpoints
+must be specified; in the baseline repository, each experiment folder contains four specialist and four
+generalist checkpoints. The -gargument specifies the minigame, and the -rargument specifies
+the number of repetitions. The proc_elo.py script takes two arguments: a directory with the
+result JSON and the prefix of the results files, and it prints out the Elo ratings for each policy. The
+proc_task_eval.py script only takes the directory and prints out the task completion metrics.
+# Full config minigames: survive, task, battle
+$ python evaluate.py experiments/full_sv -g survive -r 10
+$ python proc_elo.py experiments/full_sv survive
+$ python evaluate.py experiments/full_mt -g task -r 10
+$ python proc_task_eval.py experiments/full_mt task
+$ python evaluate.py experiments/full_tb -g battle -r 10
+$ python proc_elo.py experiments/full_tb battle
+# Mini config minigames: battle, ptk, race, koh, sandwich
+$ python evaluate.py experiments/mini_tb -g battle -r 10
+$ python proc_elo.py experiments/mini_tb battle
+$ python evaluate.py experiments/mini_pk -g ptk -r 10
+$ python proc_elo.py experiments/mini_pk ptk
+$ python evaluate.py experiments/mini_rc -g race -r 10
+$ python proc_elo.py experiments/mini_rc race
+$ python evaluate.py experiments/mini_kh -g koh -r 10
+$ python proc_elo.py experiments/mini_kh koh
+$ python evaluate.py experiments/mini_sw -g sandwich -r 10
+$ python proc_elo.py experiments/mini_sw sandwich
+29A.8 Extended Training Curves from the Full Config Experiment
+The panels below represent diverse events provided by Meta MMO’s full configuration. As training
+progresses, agents learn to engage with more game subsystems and encounter a variety of events.
+Figure A1: Survival specialist
+30Figure A2: Team Battle specialist
+31Figure A3: Multi-task Training specialist
+32A.9 Minigame Sampling Ratio for Generalists Training
+When training the generalist policy, the minigames in each episode are sampled with equal probability
+during reset. The minigame sampling ratio is calculated as the cumulative agent steps collected in
+the minigame divided by the total agent steps. Some minigames are oversampled because the length
+and/or total agent steps of each episode may vary across minigames and change due to training.
+Figure A4: Task sampling ratio for training the Full Config generalist policy.
+Figure A5: Task sampling ratio for training the Mini Config generalist policy.
+33
