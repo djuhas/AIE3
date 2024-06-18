@@ -1,0 +1,182 @@
+[33mcommit 4f8e3c67f1bf0f783e87d3137cd95d00175d6426[m[33m ([m[1;36mHEAD -> [m[1;32mmain[m[33m, [m[1;32msave-local-changes[m[33m, [m[1;32mbackup-local-changes[m[33m)[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 18 12:05:41 2024 +0200
+
+    Add .gitattributes for Git LFS
+
+[33mcommit a8a220ddcac4b44b4e24482993911e62eb45e936[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 18 11:35:12 2024 +0200
+
+    task 4 done with local 3070 8gb + 8gb shared memor
+
+[33mcommit 489b9fdff1dedf2f946022205c5bd758a510e8d0[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 18 11:02:51 2024 +0200
+
+    wk3 d1 homework for first 3 tasks
+
+[33mcommit ddf3b77b0bdb5390941e0119b6c5062a5f70b397[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Fri Jun 14 14:24:17 2024 +0200
+
+    new week new files
+
+[33mcommit c2f412be705414da62d30591d182e3750831e566[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 11 16:01:06 2024 +0200
+
+    deleting paul_graham_essays.txt
+
+[33mcommit 4638c1f70311dfb7e12680ad84aa76155e45ebb3[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 11 14:10:24 2024 +0200
+
+    homework day 2 init version
+
+[33mcommit d1fa0f6e220efe99c4f342f36d9574aafe1555c9[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 11 12:12:29 2024 +0200
+
+    update after aligment with team
+
+[33mcommit eb44dbb860be831919ac5a481e5a1205c50fce63[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 22:51:57 2024 +0200
+
+    app version 0.01b
+
+[33mcommit 1a3d429ee1b7df6d5a7420c45fac52a981f10747[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 15:05:02 2024 +0200
+
+    final d1 homework
+
+[33mcommit 643ab442c7af47640178211f76a4d9f0ee538ff8[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 14:12:26 2024 +0200
+
+    homework task init version
+
+[33mcommit 356e37adec62e2d45fe23470406c0c8406e0a847[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 13:55:02 2024 +0200
+
+    pdf add v0.1
+
+[33mcommit d7a064aa452b4c5bb049316d6381cf8558c2168b[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 13:47:46 2024 +0200
+
+    correction on homework
+
+[33mcommit d08bfecd4ba65f04fc033fe59c1cc3d0f6299f09[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 13:46:53 2024 +0200
+
+    updated homework2
+
+[33mcommit 6911083c6954e20e2bb3ffba693465f8a05c8b2c[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 10 13:38:25 2024 +0200
+
+    updated homework
+
+[33mcommit 15319b3a7ec091de7b042fee8ba3d69b2d65953f[m
+Merge: 5c1ce06 9bd3dd4
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Fri Jun 7 15:33:36 2024 +0200
+
+    Merge remote-tracking branch 'upstream/main'
+    Update 07062024
+
+[33mcommit 5c1ce067008c761be10f3a7cf7d715dd175ab0ed[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Fri Jun 7 15:29:53 2024 +0200
+
+    reset
+
+[33mcommit 9bd3dd498461bbd028c2b87fbbe84d6210c54943[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Thu Jun 6 18:54:17 2024 -0400
+
+    Releasing Week 2 Day 2 Assignment
+
+[33mcommit 992d948b27ed6ef3f0c466a0e09656ddd3212df9[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Tue Jun 4 18:49:35 2024 -0400
+
+    Week 2 Day 1 Assignment Release
+
+[33mcommit b8333d76b3596eabc844940cce77fb5ee92d9285[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Tue Jun 4 18:21:27 2024 -0400
+
+    Week 2 Day 1 Assignment Release
+
+[33mcommit 04da78b8dbe13100f3f3de8402427bd552b26d73[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Tue Jun 4 18:49:35 2024 -0400
+
+    Week 2 Day 1 Assignment Release
+
+[33mcommit 89d46c1fb0ffe3256e0b3fb071f6634319579d2e[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Tue Jun 4 18:21:27 2024 -0400
+
+    Week 2 Day 1 Assignment Release
+
+[33mcommit 7cb4e757712a25c02801a58be83264da85cfc736[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Tue Jun 4 10:40:56 2024 +0200
+
+    updated all cases with informations and tested out
+
+[33mcommit fdd392965da7f7f6988283de5c62a734ff97b0a5[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 3 16:32:50 2024 +0200
+
+    update after going through notebook
+
+[33mcommit 86e675cf7d103060f68f3664f708b4d9c85d9bfc[m
+Author: djuhas <damir.juhas@tehnicka-podrska.com>
+Date:   Mon Jun 3 16:13:33 2024 +0200
+
+    update
+
+[33mcommit b0c726d5f28d19caf4a2d228ff2596b89949c1b5[m
+Merge: 32152bd 5e0eac5
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Thu May 30 23:22:45 2024 +0000
+
+    Merge branch 'main' of github.com:AI-Maker-Space/AI-Engineering-3
+
+[33mcommit 32152bdf831f0ecda0c0c3b026cd8e4aefa55034[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Thu May 30 23:22:13 2024 +0000
+
+    Updating Week 1 Day 2 Notebook
+
+[33mcommit 5e0eac599383b7999c811d37abec053bf0e4cddd[m
+Author: Chris Alexiuk <c.s.alexiuk@gmail.com>
+Date:   Thu May 30 19:11:10 2024 -0400
+
+    Update Week 1 Day 2 Colab Link
+
+[33mcommit 967f6979b93d29c29c5d2279b294c727309bdecb[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Thu May 30 22:35:41 2024 +0000
+
+    Correcting prompt placeholder
+
+[33mcommit e0b9801baa83b8d489e9f0ae3324b00164ab2339[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Thu May 30 22:22:37 2024 +0000
+
+    Releasing Week 1 Day 2 Material
+
+[33mcommit 4977e91dc336d045e3ea6b5242fb14c28d3153d0[m
+Author: Chris Alexiuk <chris@alexiuk.ca>
+Date:   Tue May 28 20:44:35 2024 +0000
+
+    Initial Repository
