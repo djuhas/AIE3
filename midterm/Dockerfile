@@ -7,6 +7,11 @@ WORKDIR /app
 # Copy the current directory contents into the container at /app
 COPY . /app
 
+# Create necessary directories and set permissions
+RUN mkdir -p /app/.chainlit && chmod -R 777 /app/.chainlit
+RUN mkdir -p /app/.files && chmod -R 777 /app/.files
+RUN touch /app/chainlit.md && chmod 777 /app/chainlit.md
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 

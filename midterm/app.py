@@ -13,9 +13,7 @@ from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance
 
-# first, we load our environment variables from a .env file
-# this is crucial because we don't want to hardcode sensitive information like API keys directly into our script
-# it makes our code more secure and flexible since we can change these values without modifying the actual code
+# load environment variables from .env file
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -23,14 +21,10 @@ QDRANT_API_URL = os.getenv("QDRANT_API_URL")
 QDRANT_COLLECTION = os.getenv("QDRANT_COLLECTION")
 
 # function to log messages to the chainlit interface
-# this function will help us keep the user informed about what's happening behind the scenes
-# for instance, when we're loading documents, connecting to Qdrant, or indexing data
 async def log_message(message):
     await cl.Message(content=message).send()
 
 # initialize the Qdrant client and verify the connection
-# here, we're setting up a connection to the Qdrant database which will store our document vectors
-# it's important to check if the connection is successful to avoid issues later when we try to store or retrieve data
 async def initialize_qdrant_client():
     try:
         client = QdrantClient(url=QDRANT_API_URL, api_key=QDRANT_API_KEY)
@@ -41,18 +35,13 @@ async def initialize_qdrant_client():
     return client
 
 # load and split documents into smaller chunks
-# loading a large document as a single chunk isn't efficient for processing by the language model
-# instead, we split it into smaller chunks which the model can handle better
-# each chunk is given a unique ID so we can track which part of the document it came from
 async def load_and_split_documents():
     await log_message("Loading and splitting documents...")
-    document_loader = PyPDFLoader("./data/airbnb.pdf")  # specify the path to the PDF file
+    document_loader = PyPDFLoader("/app/data/airbnb.pdf")  # ensure the path is accessible within the container
     documents = document_loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1600, chunk_overlap=30)  # specify chunk size and overlap
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1600, chunk_overlap=30)
     split_documents = text_splitter.split_documents(documents)
     
-    # adding unique IDs to each document chunk
-    # this is crucial for tracking and referencing each chunk later when we need to retrieve and use them
     for i, doc in enumerate(split_documents):
         doc.metadata['document_id'] = f'doc_{i}'
     
@@ -60,8 +49,6 @@ async def load_and_split_documents():
     return split_documents
 
 # delete all existing collections in Qdrant
-# this step is necessary to ensure we're starting fresh every time we run the script
-# it prevents conflicts and ensures that old data doesn't interfere with our new data
 async def delete_all_collections(client):
     await log_message("Deleting all existing collections...")
     collections = client.get_collections().collections
@@ -70,11 +57,9 @@ async def delete_all_collections(client):
     await log_message("Deleted all existing collections.")
 
 # create a new Qdrant collection
-# a collection in Qdrant is like a table in a database where we will store our document vectors
-# it's important to define the collection properly to match the dimensions of our embeddings
 async def create_qdrant_collection(client):
     await log_message("Creating Qdrant collection...")
-    embedding_dimension = 1536  # dimension of the embeddings, it must match the embedding model used
+    embedding_dimension = 1536
     try:
         client.create_collection(
             collection_name=QDRANT_COLLECTION,
@@ -85,8 +70,6 @@ async def create_qdrant_collection(client):
         await log_message(f"Error creating collection: {e}")
 
 # index the document chunks into the Qdrant collection
-# indexing involves adding the document chunks (with their embeddings) to the Qdrant collection
-# this step is crucial because it allows us to perform efficient searches over our documents later
 async def index_documents(client, split_documents, embedding_model):
     await log_message("Indexing documents...")
     qdrant = Qdrant(client=client, collection_name=QDRANT_COLLECTION, embeddings=embedding_model)
@@ -95,7 +78,6 @@ async def index_documents(client, split_documents, embedding_model):
     return qdrant
 
 # combine the steps to delete old collections, create a new one, and index documents
-# this function ensures we have a clean setup every time we initialize the system
 async def create_or_load_qdrant_collection(client, split_documents, embedding_model):
     await delete_all_collections(client)
     await create_qdrant_collection(client)
@@ -103,24 +85,22 @@ async def create_or_load_qdrant_collection(client, split_documents, embedding_mo
     return vectorstore
 
 # initialize everything: Qdrant client, document loading, splitting, embedding, and collection creation
-# this function orchestrates all the steps required to set up our system from scratch
 async def initialize_system():
     client = await initialize_qdrant_client()
     split_documents = await load_and_split_documents()
-    embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")  # use the specified OpenAI embedding model
+    embedding_model = OpenAIEmbeddings(model="text-embedding-3-small")
     vectorstore = await create_or_load_qdrant_collection(client, split_documents, embedding_model)
     return vectorstore
 
 # run this when the chat starts to initialize everything and inform the user
-# it sets up the document retriever and the prompt template for generating responses
 @cl.on_chat_start
 async def start_chat():
     await log_message("Initializing system, please wait...")
     vectorstore = await initialize_system()
     
     retriever = vectorstore.as_retriever(
-        search_type="similarity_score_threshold",  # use similarity score threshold for searching
-        search_kwargs={"score_threshold": 0.1, "k": 5}  # parameters for the search: score threshold and number of results
+        search_type="similarity_score_threshold",
+        search_kwargs={"score_threshold": 0.1, "k": 5}
     )
 
     rag_prompt = PromptTemplate.from_template("""\
@@ -138,9 +118,8 @@ assistant
 Your task is to provide a concise and clear answer based on the context provided and nothing else.
 """)
 
-    openai_chat_model = ChatOpenAI(model="gpt-4", streaming=True)  # use the GPT-4 model for generating responses
+    openai_chat_model = ChatOpenAI(model="gpt-4o", streaming=True)
 
-    # combine the retriever and prompt template into a processing chain
     rag_chain = (
         {"context": itemgetter("query") | retriever, "query": itemgetter("query")}
         | RunnablePassthrough.assign(context=itemgetter("context"))
@@ -150,7 +129,6 @@ Your task is to provide a concise and clear answer based on the context provided
     await log_message("System initialized. Ready to answer your questions.")
 
 # this function processes user messages and provides answers
-# it retrieves relevant documents using the retriever and generates responses based on them
 @cl.on_message
 async def main(message: cl.Message):
     await log_message("Processing your query...")
@@ -165,7 +143,6 @@ async def main(message: cl.Message):
     response_content = response["response"].content
 
     # indicate if the answer is from the provided document
-    # this helps the user understand the source of the information
     source_info = "\n\nSource: Provided document." if context else ""
     final_response = response_content + source_info
 
