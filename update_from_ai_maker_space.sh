@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# Get the absolute path of the repository root
+repo_root=$(git rev-parse --show-toplevel)
+
 # Ensure script is run from the repository root
-cd "$(git rev-parse --show-toplevel)"
+cd "$repo_root"
 
 # Stash local changes to allow branch switching
 git stash -u
@@ -31,15 +34,15 @@ for file in $new_files; do
   echo "Copying $file"
   
   # Create the directory structure if it does not exist
-  mkdir -p "$(dirname "../$file")"
+  mkdir -p "$(dirname "$repo_root/$file")"
   # Copy the file or directory
-  cp -r "$file" "../$file"
+  cp -r "$file" "$repo_root/$file"
 done
 
 # Verify if the files were copied
 echo "Verifying copied files:"
 for file in $new_files; do
-  if [ -f "../$file" ] || [ -d "../$file" ]; then
+  if [ -f "$repo_root/$file" ] || [ -d "$repo_root/$file" ]; then
     echo "$file successfully copied."
   else
     echo "Failed to copy $file."
