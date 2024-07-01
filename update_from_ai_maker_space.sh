@@ -27,16 +27,22 @@ new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2-)
 echo "New files and directories:"
 echo "$new_files"
 
-# Copy new files and directories to the main branch directory
+# Copy new files and directories to the main branch directory if they don't exist
 IFS=$'\n' # Handle file names with spaces correctly
 for file in $new_files; do
-  # Debug: Print each file being copied
-  echo "Copying $file"
+  # Check if the file already exists in the destination
+  if [ ! -e "$repo_root/$file" ]; then
+    # Debug: Print each file being copied
+    echo "Copying $file"
   
-  # Create the directory structure if it does not exist
-  mkdir -p "$(dirname "$repo_root/$file")"
-  # Copy the file or directory
-  cp -r "$file" "$repo_root/$file"
+    # Create the directory structure if it does not exist
+    mkdir -p "$(dirname "$repo_root/$file")"
+    # Copy the file or directory
+    cp -r "$file" "$repo_root/$file"
+  else
+    # Debug: Print a message if the file already exists
+    echo "File $file already exists, skipping."
+  fi
 done
 
 # Verify if the files were copied
