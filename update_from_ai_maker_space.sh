@@ -20,9 +20,16 @@ git checkout -b temp-branch ai-maker-space/main
 # Identify new files and directories
 new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2-)
 
+# Debug: Print the new files and directories identified
+echo "New files and directories:"
+echo "$new_files"
+
 # Copy new files and directories to the main branch directory
 IFS=$'\n' # Handle file names with spaces correctly
 for file in $new_files; do
+  # Debug: Print each file being copied
+  echo "Copying $file"
+  
   # Create the directory structure if it does not exist
   mkdir -p "$(dirname "../$file")"
   # Copy the file or directory
