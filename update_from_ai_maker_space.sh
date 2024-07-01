@@ -18,7 +18,7 @@ git fetch ai-maker-space
 git checkout -b temp-branch ai-maker-space/main
 
 # Identify new files and directories
-new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2)
+new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2-)
 
 # Copy new files and directories to the main branch directory
 for file in $new_files; do
