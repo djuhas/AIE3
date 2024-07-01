@@ -21,6 +21,7 @@ git checkout -b temp-branch ai-maker-space/main
 new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2-)
 
 # Copy new files and directories to the main branch directory
+IFS=$'\n' # Handle file names with spaces correctly
 for file in $new_files; do
   # Create the directory structure if it does not exist
   mkdir -p "$(dirname "../$file")"
