@@ -27,6 +27,9 @@ new_files=$(git diff --name-status main..temp-branch | grep "^A" | cut -f2-)
 echo "New files and directories:"
 echo "$new_files"
 
+# Initialize an empty array for successfully copied files
+copied_files=()
+
 # Copy new files and directories to the main branch directory if they don't exist
 IFS=$'\n' # Handle file names with spaces correctly
 for file in $new_files; do
@@ -39,6 +42,8 @@ for file in $new_files; do
     mkdir -p "$(dirname "$repo_root/$file")"
     # Copy the file or directory
     cp -r "$file" "$repo_root/$file"
+    # Add to copied files array
+    copied_files+=("$file")
   else
     # Debug: Print a message if the file already exists
     echo "File $file already exists, skipping."
@@ -47,7 +52,7 @@ done
 
 # Verify if the files were copied
 echo "Verifying copied files:"
-for file in $new_files; do
+for file in "${copied_files[@]}"; do
   if [ -f "$repo_root/$file" ] || [ -d "$repo_root/$file" ]; then
     echo "$file successfully copied."
   else
@@ -61,9 +66,14 @@ git checkout main
 # Apply stashed changes
 git stash pop
 
-# Add and commit the new files
+# Add and commit the new files, excluding the script itself
 git add .
+git reset update_from_ai_maker_space.sh
 git commit -m "Added new files from AI-Engineering-3 repository"
 
 # Delete the temporary branch
 git branch -d temp-branch
+
+# Push the changes to the remote repository if needed
+echo "Your branch is ahead of 'origin/main' by $(git rev-list --count origin/main..main) commit(s)."
+echo "To publish your local commits, use 'git push'."
