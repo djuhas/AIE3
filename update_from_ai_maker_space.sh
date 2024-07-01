@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Ensure script is run from the repository root
+cd "$(git rev-parse --show-toplevel)"
+
+# Stash local changes to allow branch switching
+git stash -u
+
 # Add the AI-Maker-Space repository as a remote if it does not exist
 if ! git remote | grep -q "ai-maker-space"; then
   git remote add ai-maker-space https://github.com/AI-Maker-Space/AI-Engineering-3.git
@@ -24,6 +30,9 @@ done
 
 # Switch back to the main branch
 git checkout main
+
+# Apply stashed changes
+git stash pop
 
 # Add and commit the new files
 git add .
