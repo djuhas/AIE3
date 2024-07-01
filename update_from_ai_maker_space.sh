@@ -14,10 +14,12 @@ git checkout -b temp-branch ai-maker-space/main
 # Identify new files and directories
 new_files=$(git diff --name-only --diff-filter=A main..temp-branch)
 
-# Copy new files to the main branch directory
+# Copy new files and directories to the main branch directory
 for file in $new_files; do
-  mkdir -p "$(dirname "../path/to/your/main/$file")"
-  cp "temp-branch/$file" "../path/to/your/main/$file"
+  # Create the directory structure if it does not exist
+  mkdir -p "$(dirname "$file")"
+  # Copy the file or directory
+  cp -r "$file" "../path/to/your/main/$file"
 done
 
 # Switch back to the main branch
