@@ -36,6 +36,16 @@ for file in $new_files; do
   cp -r "$file" "../$file"
 done
 
+# Verify if the files were copied
+echo "Verifying copied files:"
+for file in $new_files; do
+  if [ -f "../$file" ] || [ -d "../$file" ]; then
+    echo "$file successfully copied."
+  else
+    echo "Failed to copy $file."
+  fi
+done
+
 # Switch back to the main branch
 git checkout main
 
